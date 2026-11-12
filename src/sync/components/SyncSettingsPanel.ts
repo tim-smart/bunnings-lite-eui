@@ -21,7 +21,6 @@ import { SyncSettings } from "../services/SyncSettings.ts"
 const SettingsSnapshot = Loader.Snapshot(GetSyncSettings, "settings")
 
 export const SyncSettingsPanelMessage = Schema.TaggedUnion({
-  Opened: {},
   Closed: {},
   RemoteUrlTyped: { text: Schema.String },
   CopyPressed: {},
@@ -29,12 +28,11 @@ export const SyncSettingsPanelMessage = Schema.TaggedUnion({
   CopiedExpired: {},
   FocusWrapped: { wrap: FocusWrap },
   Done: {},
-  SettingsChanged: {
-    snapshot: SettingsSnapshot,
-    remoteUrl: Schema.NullOr(Schema.String),
-  },
+  SettingsChanged: { snapshot: SettingsSnapshot },
 })
 const Message = SyncSettingsPanelMessage
+
+export const SyncSettingsPanelEvents = Schema.TaggedUnion({ Closed: {} })
 
 /** Saves the remote to sync with, or none, and connects to it. */
 export class SetRemoteUrl extends Command.Service<SetRemoteUrl>()(
@@ -78,7 +76,6 @@ export class CopyInvite extends Command.Service<CopyInvite>()(
   }),
 ) {}
 
-const triggerRef = Html.ref("sync-settings-trigger", "button")
 const panelRef = Html.ref("sync-settings-close", "button")
 const remoteUrlRef = Html.ref("sync-settings-remote-url", "input")
 const focusWrapped = (wrap: FocusWrap) =>
@@ -94,44 +91,32 @@ const remoteUrlOf = (text: string): string | null | undefined => {
   return URL.canParse(trimmed) ? trimmed : undefined
 }
 
-/** The button that opens the sync settings, and the settings themselves. */
+/**
+ * The sync settings, in a drawer. Mount it while it is open, outside the
+ * page it covers. It reports when it is closed.
+ */
 export const SyncSettingsPanelNoDeps = Component.make({
   name: "SyncSettingsPanel",
   model: Schema.Struct({
     settings: SettingsSnapshot,
-    open: Schema.Boolean,
-    /** The remote that is saved, to start the field from. */
-    saved: Schema.String,
-    /** What the remote field holds. */
-    remoteUrl: Schema.String,
+    /** What was typed into the remote field. It shows the saved one until then. */
+    remoteUrl: Schema.NullOr(Schema.String),
     /** Whether an invite link was just copied. */
     copied: Schema.Boolean,
   }),
   message: Message,
+  events: SyncSettingsPanelEvents,
   loaders: {
     settings: () => ({}),
   },
-  init: ($) => ({
-    ...$.empty,
-    open: false,
-    saved: "",
-    remoteUrl: "",
-    copied: false,
-  }),
+  init: ($) =>
+    $.set({ ...$.empty, remoteUrl: null, copied: false }).run(
+      Html.focus(panelRef, () => Message.make({ _tag: "Done" })),
+    ),
   update: (model, message, $) =>
     Message.match(message, {
-      // The settings can change while this is closed, by accepting an invite
-      Opened: () =>
-        $.set({
-          ...model,
-          open: true,
-          remoteUrl: model.saved,
-          copied: false,
-        }).run(Html.focus(panelRef, () => Message.make({ _tag: "Done" }))),
       Closed: () =>
-        $.set({ ...model, open: false }).run(
-          Html.focus(triggerRef, () => Message.make({ _tag: "Done" })),
-        ),
+        $.set(model).emit(SyncSettingsPanelEvents.make({ _tag: "Closed" })),
       RemoteUrlTyped: ({ text }) => {
         const url = remoteUrlOf(text)
         return url === undefined
@@ -158,23 +143,12 @@ export const SyncSettingsPanelNoDeps = Component.make({
           ),
         ),
       Done: () => model,
-      SettingsChanged: ({ remoteUrl, snapshot }) => ({
-        ...model,
-        settings: snapshot,
-        saved: remoteUrl ?? "",
-      }),
+      SettingsChanged: ({ snapshot }) => ({ ...model, settings: snapshot }),
     }),
   subscriptions: (model, _props, $) => [
     $.watch({
-      settings: (snapshot, result) =>
-        Message.make({
-          _tag: "SettingsChanged",
-          snapshot,
-          remoteUrl: Option.match(AsyncResult.value(result), {
-            onNone: () => null,
-            onSome: (settings) => settings.remoteUrl,
-          }),
-        }),
+      settings: (snapshot) =>
+        Message.make({ _tag: "SettingsChanged", snapshot }),
     }),
     ...(model.copied
       ? [
@@ -190,115 +164,101 @@ export const SyncSettingsPanelNoDeps = Component.make({
   view: (model, h) => {
     const labelClass = "flex flex-col gap-1.5 text-sm font-medium"
 
-    const panel = () =>
-      drawer(
+    return drawer(
+      h,
+      {
+        titleId: "sync-settings-title",
+        onClose: Message.make({ _tag: "Closed" }),
+        onWrap: focusWrapped,
+      },
+      drawerHeader(
         h,
-        {
-          titleId: "sync-settings-title",
-          onClose: Message.make({ _tag: "Closed" }),
-          onWrap: focusWrapped,
-        },
-        drawerHeader(
-          h,
-          { titleId: "sync-settings-title", title: "Sync settings" },
-          "Keep your favourites in step across devices.",
-        ),
-        AsyncResult.match(h.loaded.settings, {
-          onInitial: () =>
-            h
-              .div(skeleton(h, "h-10 w-full"), skeleton(h, "h-10 w-full"))
-              .class("px-4 pb-2 flex flex-col gap-4"),
-          onFailure: () => h.div(),
-          onSuccess: ({ value: settings }) =>
-            h
-              .div(
-                h
-                  .label(
-                    "Remote URL",
-                    h
-                      .input()
-                      .ref(remoteUrlRef)
-                      .id("remote-url")
-                      .attr("placeholder", "https://")
-                      .class(inputClass())
-                      .value(model.remoteUrl)
-                      .onInput(({ value }) =>
-                        Message.make({ _tag: "RemoteUrlTyped", text: value }),
-                      ),
-                  )
-                  .class(labelClass),
-                h
-                  .label(
-                    "Identity",
-                    // Switching identity discards local data, so it goes
-                    // through the invite prompt instead
-                    h
-                      .input()
-                      .id("identity")
-                      .attr("readonly", "")
-                      .class(inputClass())
-                      .value(settings.identity),
-                  )
-                  .class(labelClass),
-                h
-                  .div(
-                    h
-                      .p(
-                        icon(h, "triangleAlert", {
-                          class: "size-4 shrink-0 mt-0.5",
-                        }),
-                        h.span(
-                          "An invite link gives full access to your synced favorites. Whoever has it can read, change and clear them, from any device, and it can't be revoked later. Only send it to people you trust.",
-                        ),
-                      )
-                      .class("flex gap-2 text-amber-900 dark:text-amber-200"),
-                    h
-                      .button(
-                        icon(h, model.copied ? "check" : "copy"),
-                        "Copy invite link",
-                      )
-                      .attr("type", "button")
-                      .disabled(settings.remoteUrl === null)
-                      .class(buttonClass({ variant: "outline" }))
-                      .onClick(Message.make({ _tag: "CopyPressed" })),
-                    settings.remoteUrl === null &&
-                      h
-                        .p("Set a remote URL to create an invite.")
-                        .class("text-muted-foreground"),
-                    model.copied &&
-                      h
-                        .p("Copied. Send it privately.")
-                        .attr("role", "status")
-                        .class("text-muted-foreground"),
-                  )
-                  .class(
-                    "flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-400/30 dark:bg-amber-400/10",
-                  ),
-              )
-              .class("px-4 pb-2 flex flex-col gap-4"),
-        }),
-        drawerFooter(
-          h,
+        { titleId: "sync-settings-title", title: "Sync settings" },
+        "Keep your favourites in step across devices.",
+      ),
+      AsyncResult.match(h.loaded.settings, {
+        onInitial: () =>
           h
-            .button("Close")
-            .ref(panelRef)
-            .attr("type", "button")
-            .class(buttonClass({ variant: "outline" }))
-            .onClick(Message.make({ _tag: "Closed" })),
-        ),
-      )
-
-    return h.div(
-      h
-        .button(icon(h, "settings2", { class: "size-5" }))
-        .ref(triggerRef)
-        .attr("type", "button")
-        .attr("aria-label", "Sync settings")
-        .class(
-          "grid size-10 cursor-pointer place-items-center rounded-full text-white/90 transition-colors hover:bg-white/10 hover:text-white active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
-        )
-        .onClick(Message.make({ _tag: "Opened" })),
-      model.open && panel(),
+            .div(skeleton(h, "h-10 w-full"), skeleton(h, "h-10 w-full"))
+            .class("px-4 pb-2 flex flex-col gap-4"),
+        onFailure: () => h.div(),
+        onSuccess: ({ value: settings }) =>
+          h
+            .div(
+              h
+                .label(
+                  "Remote URL",
+                  h
+                    .input()
+                    .ref(remoteUrlRef)
+                    .id("remote-url")
+                    .attr("placeholder", "https://")
+                    .class(inputClass())
+                    .value(model.remoteUrl ?? settings.remoteUrl ?? "")
+                    .onInput(({ value }) =>
+                      Message.make({ _tag: "RemoteUrlTyped", text: value }),
+                    ),
+                )
+                .class(labelClass),
+              h
+                .label(
+                  "Identity",
+                  // Switching identity discards local data, so it goes
+                  // through the invite prompt instead
+                  h
+                    .input()
+                    .id("identity")
+                    .attr("readonly", "")
+                    .class(inputClass())
+                    .value(settings.identity),
+                )
+                .class(labelClass),
+              h
+                .div(
+                  h
+                    .p(
+                      icon(h, "triangleAlert", {
+                        class: "size-4 shrink-0 mt-0.5",
+                      }),
+                      h.span(
+                        "An invite link gives full access to your synced favorites. Whoever has it can read, change and clear them, from any device, and it can't be revoked later. Only send it to people you trust.",
+                      ),
+                    )
+                    .class("flex gap-2 text-amber-900 dark:text-amber-200"),
+                  h
+                    .button(
+                      icon(h, model.copied ? "check" : "copy"),
+                      "Copy invite link",
+                    )
+                    .attr("type", "button")
+                    .disabled(settings.remoteUrl === null)
+                    .class(buttonClass({ variant: "outline" }))
+                    .onClick(Message.make({ _tag: "CopyPressed" })),
+                  settings.remoteUrl === null &&
+                    h
+                      .p("Set a remote URL to create an invite.")
+                      .class("text-muted-foreground"),
+                  model.copied &&
+                    h
+                      .p("Copied. Send it privately.")
+                      .attr("role", "status")
+                      .class("text-muted-foreground"),
+                )
+                .class(
+                  "flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-400/30 dark:bg-amber-400/10",
+                ),
+            )
+            .class("px-4 pb-2 flex flex-col gap-4"),
+      }),
+      drawerFooter(
+        h,
+        h
+          .button("Close")
+          .ref(panelRef)
+          .attr("type", "button")
+          .class(buttonClass({ variant: "outline" }))
+          .onClick(Message.make({ _tag: "Closed" })),
+      ),
     )
   },
 })

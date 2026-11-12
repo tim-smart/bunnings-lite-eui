@@ -6,34 +6,23 @@ import {
   SessionLocation,
   type Store,
 } from "../../../server/src/domain/Bunnings.ts"
-import { buttonClass, inputClass } from "../../design/classes.ts"
-import {
-  drawer,
-  drawerHeader,
-  FocusWrap,
-  wrapFocus,
-} from "../../design/drawer.ts"
 import { icon } from "../../design/icons.ts"
-import { skeleton } from "../../design/skeleton.ts"
 import { cn } from "../../lib/utils.ts"
 import { SessionTag } from "../../rpc/domain/SessionTag.ts"
 import { Session } from "../../rpc/services/Session.ts"
-import { AllStores } from "../loaders/AllStores.ts"
 import { CurrentStore } from "../loaders/CurrentStore.ts"
 import { NearbyStores } from "../loaders/NearbyStores.ts"
+import { StoreSearchPrompt } from "../services/StoreSearchPrompt.ts"
 
 const CurrentSnapshot = Loader.Snapshot(CurrentStore, "current")
 const NearbySnapshot = Loader.Snapshot(NearbyStores, "nearby")
-const AllSnapshot = Loader.Snapshot(AllStores, "all")
 
 export const StoreSelectorMessage = Schema.TaggedUnion({
   Reached: {},
   StoreChosen: { location: SessionLocation },
   SearchOpened: {},
-  SearchClosed: {},
-  SearchTyped: { text: Schema.String },
-  Retried: {},
-  FocusWrapped: { wrap: FocusWrap },
+  /** The store the search came back with, or none when it was closed. */
+  SearchAnswered: { store: Schema.Option(SessionLocation) },
   Done: {},
   CurrentChanged: {
     snapshot: CurrentSnapshot,
@@ -41,7 +30,6 @@ export const StoreSelectorMessage = Schema.TaggedUnion({
     code: Schema.NullOr(Schema.String),
   },
   NearbyChanged: { snapshot: NearbySnapshot },
-  AllChanged: { snapshot: AllSnapshot },
 })
 const Message = StoreSelectorMessage
 
@@ -59,33 +47,22 @@ export class ChooseStore extends Command.Service<ChooseStore>()(
   }),
 ) {}
 
-/** Loads the list of every store again, after it failed. */
-export class RetryAllStores extends Command.Service<RetryAllStores>()(
-  "stores/RetryAllStores",
-  { args: {}, invalidates: () => [AllStores] },
-  Effect.succeed(() => Effect.void),
+/**
+ * Opens the search of every store and waits for what it comes back with:
+ * a store, or none when it is closed.
+ */
+export class SearchAllStores extends Command.Service<SearchAllStores>()(
+  "stores/SearchAllStores",
+  { args: {}, invalidates: () => [] },
+  Effect.gen(function* () {
+    const prompt = yield* StoreSearchPrompt
+    return () => prompt.ask
+  }),
 ) {}
 
 const searchButtonRef = Html.ref("store-search-open", "button")
-const searchRef = Html.ref("store-search", "input")
-const lastRef = Html.ref("store-search-last", "button")
 
 const done = Command.map(() => Message.make({ _tag: "Done" }))
-const focusWrapped = (wrap: FocusWrap) =>
-  Message.make({ _tag: "FocusWrapped", wrap })
-
-const matches = (store: Store, terms: ReadonlyArray<string>) => {
-  const text = [
-    store.displayName,
-    store.address.town,
-    store.address.postalCode,
-    store.storeRegion,
-    store.address.country.name,
-  ]
-    .join(" ")
-    .toLowerCase()
-  return terms.every((term) => text.includes(term))
-}
 
 /**
  * Chooses the store to shop at: from the ten nearest, which asks for the
@@ -94,6 +71,9 @@ const matches = (store: Store, terms: ReadonlyArray<string>) => {
  * The nearest stores are a native `select`, so the keyboard and a phone's
  * own picker work without any handling here. The chosen store is marked on
  * its `option`: a `value` on the `select` is set before it has options.
+ *
+ * The search is a drawer, which the shell shows. It is asked for here and
+ * comes back with a store or without one.
  */
 export const StoreSelectorNoDeps = Component.make({
   name: "StoreSelector",
@@ -102,12 +82,8 @@ export const StoreSelectorNoDeps = Component.make({
     nearbyWanted: Schema.Boolean,
     /** The store just chosen, until the session has it too. */
     chosen: Schema.NullOr(SessionLocation),
-    /** Whether the search of every store is open. */
-    searching: Schema.Boolean,
-    search: Schema.String,
     current: CurrentSnapshot,
     nearby: NearbySnapshot,
-    all: AllSnapshot,
   }),
   message: Message,
   loaders: {
@@ -115,47 +91,42 @@ export const StoreSelectorNoDeps = Component.make({
     // Asking for nearby stores asks for the device's location, so it waits
     // until the picker is reached for
     nearby: (model) => (model.nearbyWanted ? {} : undefined),
-    all: (model) => (model.searching ? {} : undefined),
   },
   init: ($) => ({
     ...$.empty,
     nearbyWanted: false,
     chosen: null,
-    searching: false,
-    search: "",
   }),
   update: (model, message, $) =>
     Message.match(message, {
       Reached: () =>
         model.nearbyWanted ? model : { ...model, nearbyWanted: true },
-      StoreChosen: ({ location }) => {
-        const next = { ...model, chosen: location, searching: false }
-        const choose = ChooseStore.make({ location }).pipe(done)
-        return model.searching
-          ? $.set(next).run(
-              choose,
-              Html.focus(searchButtonRef, () => Message.make({ _tag: "Done" })),
-            )
-          : $.set(next).run(choose)
-      },
+      StoreChosen: ({ location }) =>
+        $.set({ ...model, chosen: location }).run(
+          ChooseStore.make({ location }).pipe(done),
+        ),
       SearchOpened: () =>
-        $.set({ ...model, searching: true, search: "" }).run(
-          Html.focus(searchRef, () => Message.make({ _tag: "Done" })),
-        ),
-      SearchClosed: () =>
-        $.set({ ...model, searching: false }).run(
-          Html.focus(searchButtonRef, () => Message.make({ _tag: "Done" })),
-        ),
-      SearchTyped: ({ text }) => ({ ...model, search: text }),
-      Retried: () => $.run(RetryAllStores.make().pipe(done)),
-      FocusWrapped: ({ wrap }) =>
         $.run(
-          wrapFocus(
-            wrap,
-            { first: searchRef, last: lastRef },
-            { done: Message.make({ _tag: "Done" }), onWrap: focusWrapped },
+          SearchAllStores.make().pipe(
+            Command.map((store) =>
+              Message.make({ _tag: "SearchAnswered", store }),
+            ),
           ),
         ),
+      // The page is live again by now, so its button can take focus back
+      SearchAnswered: ({ store }) => {
+        const refocus = Html.focus(searchButtonRef, () =>
+          Message.make({ _tag: "Done" }),
+        )
+        return Option.match(store, {
+          onNone: () => $.run(refocus),
+          onSome: (location) =>
+            $.set({ ...model, chosen: location }).run(
+              ChooseStore.make({ location }).pipe(done),
+              refocus,
+            ),
+        })
+      },
       Done: () => model,
       CurrentChanged: ({ snapshot, code }) => ({
         ...model,
@@ -163,7 +134,6 @@ export const StoreSelectorNoDeps = Component.make({
         chosen: model.chosen?.code === code ? null : model.chosen,
       }),
       NearbyChanged: ({ snapshot }) => ({ ...model, nearby: snapshot }),
-      AllChanged: ({ snapshot }) => ({ ...model, all: snapshot }),
     }),
   subscriptions: (_model, _props, $) => [
     $.watch({
@@ -177,7 +147,6 @@ export const StoreSelectorNoDeps = Component.make({
           }),
         }),
       nearby: (snapshot) => Message.make({ _tag: "NearbyChanged", snapshot }),
-      all: (snapshot) => Message.make({ _tag: "AllChanged", snapshot }),
     }),
   ],
   view: (model, h) => {
@@ -198,151 +167,6 @@ export const StoreSelectorNoDeps = Component.make({
           onSuccess: ({ value }) =>
             value.length === 0 ? "No stores found near you." : "",
         })
-
-    const storeSearch = () => {
-      const terms = model.search.toLowerCase().split(/\s+/).filter(Boolean)
-      return drawer(
-        h,
-        {
-          titleId: "store-search-title",
-          onClose: Message.make({ _tag: "SearchClosed" }),
-          onWrap: focusWrapped,
-          class: "h-[80vh]",
-        },
-        drawerHeader(
-          h,
-          { titleId: "store-search-title", title: "Find your store" },
-          "Search Bunnings stores in New Zealand and Australia.",
-        ),
-        h
-          .div(
-            h
-              .div(
-                icon(h, "search", {
-                  class:
-                    "absolute left-7 top-1/2 -translate-y-1/2 -mt-1 size-4 text-muted-foreground",
-                }),
-                h
-                  .input()
-                  .ref(searchRef)
-                  .attr("type", "search")
-                  .attr("aria-label", "Search stores")
-                  .attr("placeholder", "Store, suburb or postcode")
-                  .class(inputClass("pl-9"))
-                  .value(model.search)
-                  .onInput(({ value }) =>
-                    Message.make({ _tag: "SearchTyped", text: value }),
-                  ),
-              )
-              .class("px-4 pb-2 relative"),
-            h
-              .div(
-                AsyncResult.match(h.loaded.all, {
-                  onInitial: () =>
-                    [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
-                      skeleton(h, "h-12 my-2").key(`skeleton-${i}`),
-                    ),
-                  onFailure: () =>
-                    h
-                      .div(
-                        h.p("Couldn't load stores.").attr("role", "status"),
-                        h
-                          .button("Try again")
-                          .ref(lastRef)
-                          .attr("type", "button")
-                          .class(buttonClass({ variant: "outline" }))
-                          .onClick(Message.make({ _tag: "Retried" })),
-                      )
-                      .class(
-                        "flex flex-col items-center gap-3 py-8 text-sm text-muted-foreground",
-                      ),
-                  onSuccess: ({ value: stores }) => {
-                    const found = stores.filter((store) =>
-                      matches(store, terms),
-                    )
-                    if (found.length === 0) {
-                      return h
-                        .p(`No stores match “${model.search.trim()}”.`)
-                        .attr("role", "status")
-                        .class("py-8 text-center text-sm text-muted-foreground")
-                    }
-                    const countries = new Map<string, Array<Store>>()
-                    for (const store of found) {
-                      const country = store.address.country.name
-                      countries.set(country, [
-                        ...(countries.get(country) ?? []),
-                        store,
-                      ])
-                    }
-                    for (const stores of countries.values()) {
-                      stores.sort((a, b) =>
-                        a.displayName.localeCompare(b.displayName),
-                      )
-                    }
-                    // Where Shift+Tab from the search box carries on from
-                    const lastCountry = Array.from(countries.values()).pop()
-                    const last = lastCountry?.[lastCountry.length - 1]
-                    const item = (store: Store) => {
-                      const button = h
-                        .button(
-                          icon(h, "mapPin", {
-                            class: "size-4 shrink-0 text-accent",
-                          }),
-                          h
-                            .span(
-                              h
-                                .span(store.displayName)
-                                .class("font-medium text-primary"),
-                              h
-                                .span(store.address.formattedAddress)
-                                .class(
-                                  "truncate text-xs text-muted-foreground",
-                                ),
-                            )
-                            .class("flex min-w-0 flex-1 flex-col"),
-                          isShown(store.name) &&
-                            icon(h, "check", { class: "size-4 text-primary" }),
-                        )
-                        .attr("type", "button")
-                        .attr(
-                          "aria-current",
-                          isShown(store.name) ? "true" : undefined,
-                        )
-                        .class(
-                          "flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
-                        )
-                        .onClick(
-                          Message.make({
-                            _tag: "StoreChosen",
-                            location: SessionLocation.fromStore(store),
-                          }),
-                        )
-                      return h
-                        .li(store === last ? button.ref(lastRef) : button)
-                        .key(store.name)
-                    }
-                    return Array.from(countries, ([country, stores]) =>
-                      h
-                        .section(
-                          h
-                            .h3(country)
-                            .class(
-                              "sticky top-0 bg-background py-2 text-sm font-semibold text-primary",
-                            ),
-                          h.ul(stores.map(item)).class("flex flex-col"),
-                        )
-                        .attr("aria-label", country)
-                        .class("pb-4")
-                        .key(country),
-                    )
-                  },
-                }),
-              )
-              .class("overflow-y-auto flex-1 px-4 pb-safe"),
-          )
-          .class("flex flex-col min-h-0 flex-1"),
-      )
-    }
 
     return h
       .div(
@@ -434,7 +258,6 @@ export const StoreSelectorNoDeps = Component.make({
               .onClick(Message.make({ _tag: "SearchOpened" })),
           )
           .class("mt-2 flex items-center gap-3"),
-        model.searching && storeSearch(),
       )
       .class("w-full")
   },
@@ -445,9 +268,8 @@ export const StoreSelector = StoreSelectorNoDeps.pipe(
     Layer.mergeAll(
       CurrentStore.layer,
       NearbyStores.layer,
-      AllStores.layer,
       ChooseStore.layer,
-      RetryAllStores.layer,
-    ).pipe(Layer.provide(Session.layer)),
+      SearchAllStores.layer,
+    ).pipe(Layer.provide([Session.layer, StoreSearchPrompt.layer])),
   ),
 )

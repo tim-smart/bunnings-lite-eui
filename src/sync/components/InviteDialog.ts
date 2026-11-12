@@ -27,6 +27,12 @@ export const InviteDialogMessage = Schema.TaggedUnion({
 })
 const Message = InviteDialogMessage
 
+/** Whether the dialog is showing, for its owner to make the page inert. */
+export const InviteDialogEvents = Schema.TaggedUnion({
+  Opened: {},
+  Closed: {},
+})
+
 /**
  * Joins through the invite that was opened. The page reloads to finish it,
  * so this only resolves if there was nothing to join.
@@ -58,7 +64,8 @@ const focusWrapped = (wrap: FocusWrap) =>
 
 /**
  * Asks before joining through an invite link the page was opened with, and
- * says so when the link can't be read.
+ * says so when the link can't be read. It is a drawer, so it is mounted
+ * outside the page it covers.
  */
 export const InviteDialogNoDeps = Component.make({
   name: "InviteDialog",
@@ -68,6 +75,7 @@ export const InviteDialogNoDeps = Component.make({
     invite: Schema.NullOr(PendingInvite),
   }),
   message: Message,
+  events: InviteDialogEvents,
   loaders: {
     settings: () => ({}),
   },
@@ -75,16 +83,21 @@ export const InviteDialogNoDeps = Component.make({
   update: (model, message, $) =>
     Message.match(message, {
       InviteOpened: ({ invite }) =>
-        $.set({ ...model, invite }).run(
-          Html.focus(dismissRef, () => Message.make({ _tag: "Done" })),
+        $.set({ ...model, invite })
+          .run(Html.focus(dismissRef, () => Message.make({ _tag: "Done" })))
+          .emit(InviteDialogEvents.make({ _tag: "Opened" })),
+      Dismissed: () =>
+        $.set({ ...model, invite: null }).emit(
+          InviteDialogEvents.make({ _tag: "Closed" }),
         ),
-      Dismissed: () => ({ ...model, invite: null }),
       Joined: () =>
-        $.set({ ...model, invite: null }).run(
-          JoinSync.make().pipe(
-            Command.map(() => Message.make({ _tag: "Done" })),
-          ),
-        ),
+        $.set({ ...model, invite: null })
+          .run(
+            JoinSync.make().pipe(
+              Command.map(() => Message.make({ _tag: "Done" })),
+            ),
+          )
+          .emit(InviteDialogEvents.make({ _tag: "Closed" })),
       FocusWrapped: ({ wrap }) =>
         $.run(
           wrapFocus(

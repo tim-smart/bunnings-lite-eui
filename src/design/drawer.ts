@@ -16,14 +16,14 @@ export const FocusWrap = Schema.Struct({
 export type FocusWrap = typeof FocusWrap.Type
 
 /**
- * A bottom sheet over the page, and a modal: Tab stays inside it. Render it
- * only while it is open. Escape and a press on the backdrop both send
- * `onClose`; the component that opens it moves focus into it with
+ * A bottom sheet over the page, and a modal. Render it only while it is
+ * open, and outside the page: `Shell` makes the page `inert` behind it, and
+ * a drawer inside the page would be inert too. Escape and a press on the
+ * backdrop both send `onClose`; its component moves focus into it with
  * `Html.focus`.
  *
  * Tab past either end lands on a hidden stop, which sends `onWrap` with the
- * end to carry on from. Answer it by running `wrapFocus`. Where the browser
- * has `interactivity: inert`, `index.css` also makes the page behind inert.
+ * end to carry on from. Answer it by running `wrapFocus`.
  *
  * `titleId` is the id `drawerHeader` gives the title, which names the dialog.
  */
@@ -49,8 +49,6 @@ export const drawer = <Msg, const C extends ReadonlyArray<View.Input<Msg>>>(
       .div()
       .class("fixed inset-0 z-50 bg-black/50 animate-in fade-in-0")
       .attr("aria-hidden", "true")
-      // Keeps it out of the inert page, so a press on it still closes
-      .attr("data-drawer-backdrop", "")
       .onClick(options.onClose),
     h
       .dialog(

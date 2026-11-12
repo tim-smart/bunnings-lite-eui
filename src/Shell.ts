@@ -1,8 +1,9 @@
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { EventLog } from "effect/eventlog"
 import { AsyncResult, Loader } from "effect/reactivity"
-import { Command, Component, Router } from "effect/ui"
+import { Command, Component, Router, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
+import { SessionLocation } from "../server/src/domain/Bunnings.ts"
 import { Viewport } from "./browser/services/Viewport.ts"
 import { buttonClass, inputClass } from "./design/classes.ts"
 import { icon } from "./design/icons.ts"
@@ -17,6 +18,8 @@ import { AppRoute, queryOf } from "./routes.ts"
 import { Session } from "./rpc/services/Session.ts"
 import { searchArgs, searchDebounce } from "./search/domain/Search.ts"
 import { SearchProducts } from "./search/loaders/SearchProducts.ts"
+import { StoreSearch } from "./stores/components/StoreSearch.ts"
+import { StoreSearchPrompt } from "./stores/services/StoreSearchPrompt.ts"
 import { InviteDialog } from "./sync/components/InviteDialog.ts"
 import { SyncSettingsPanel } from "./sync/components/SyncSettingsPanel.ts"
 import { Invites } from "./sync/services/Invites.ts"
@@ -29,6 +32,11 @@ export const ShellMessage = Schema.TaggedUnion({
   SearchTyped: { text: Schema.String },
   SearchSubmitted: {},
   SearchWanted: {},
+  SyncSettingsOpened: {},
+  SyncSettingsClosed: {},
+  InviteChanged: { open: Schema.Boolean },
+  StoreSearchAsked: { asking: Schema.Boolean },
+  StoreSearchAnswered: { store: Schema.Option(SessionLocation) },
   Done: {},
   ResultsChanged: { snapshot: ResultsSnapshot },
 })
@@ -44,7 +52,37 @@ export class ScrollToTop extends Command.Service<ScrollToTop>()(
   }),
 ) {}
 
+/**
+ * Answers the store selector's search of every store with the store the
+ * drawer came back with, or with none.
+ */
+export class AnswerStoreSearch extends Command.Service<AnswerStoreSearch>()(
+  "Shell/AnswerStoreSearch",
+  {
+    args: { store: Schema.Option(SessionLocation) },
+    invalidates: () => [],
+  },
+  Effect.gen(function* () {
+    const prompt = yield* StoreSearchPrompt
+    return ({ store }) => prompt.answer(store)
+  }),
+) {}
+
+const storeSearchAsked = Subscription.make(
+  "Shell/storeSearchAsked",
+  Stream.unwrap(
+    Effect.map(StoreSearchPrompt, (prompt) =>
+      prompt.asking.pipe(
+        Stream.map((asking) =>
+          Message.make({ _tag: "StoreSearchAsked", asking }),
+        ),
+      ),
+    ),
+  ),
+)
+
 const searchRef = Html.ref("search", "input")
+const syncSettingsRef = Html.ref("sync-settings-open", "button")
 
 const done = Command.map(() => Message.make({ _tag: "Done" }))
 
@@ -52,20 +90,35 @@ const done = Command.map(() => Message.make({ _tag: "Done" }))
  * The frame around every page: the header with the logo, the search box and
  * the sync settings, and the page the route names. It is mounted once any
  * pending join is finished, and provides the services its pages share.
+ *
+ * The drawers are mounted here too, beside the page instead of inside it.
+ * A drawer is a modal, so the page is `inert` while one is open, and that
+ * can't be undone for anything inside it.
  */
 export const ShellNoDeps = Component.make({
   name: "Shell",
   props: Schema.Struct({ route: AppRoute }),
   // The search itself belongs to the search page. It is watched here as
   // well, for the search box to show while it is running.
-  model: Schema.Struct({ results: ResultsSnapshot }),
+  model: Schema.Struct({
+    results: ResultsSnapshot,
+    // Which drawers are open
+    syncSettings: Schema.Boolean,
+    storeSearch: Schema.Boolean,
+    invite: Schema.Boolean,
+  }),
   message: Message,
   loaders: {
     results: Component.debounce(searchDebounce, (_model, props) =>
       searchArgs(props.route),
     ),
   },
-  init: ($) => $.empty,
+  init: ($) => ({
+    ...$.empty,
+    syncSettings: false,
+    storeSearch: false,
+    invite: false,
+  }),
   update: (model, message, $) =>
     Message.match(message, {
       SearchTyped: ({ text }) => {
@@ -97,15 +150,30 @@ export const ShellNoDeps = Component.make({
           }),
           ScrollToTop.make().pipe(done),
         ),
+      SyncSettingsOpened: () => ({ ...model, syncSettings: true }),
+      // The page is live again in the render that focus waits for
+      SyncSettingsClosed: () =>
+        $.set({ ...model, syncSettings: false }).run(
+          Html.focus(syncSettingsRef, () => Message.make({ _tag: "Done" })),
+        ),
+      InviteChanged: ({ open }) => ({ ...model, invite: open }),
+      // False without an answer when the page that asked has gone
+      StoreSearchAsked: ({ asking }) => ({ ...model, storeSearch: asking }),
+      // Closed here first, so the page is live before the selector hears
+      StoreSearchAnswered: ({ store }) =>
+        $.set({ ...model, storeSearch: false }).run(
+          AnswerStoreSearch.make({ store }).pipe(done),
+        ),
       Done: () => model,
-      ResultsChanged: ({ snapshot }) => ({ results: snapshot }),
+      ResultsChanged: ({ snapshot }) => ({ ...model, results: snapshot }),
     }),
   subscriptions: (_model, _props, $) => [
     $.watch({
       results: (snapshot) => Message.make({ _tag: "ResultsChanged", snapshot }),
     }),
+    storeSearchAsked,
   ],
-  view: (_model, h) => {
+  view: (model, h) => {
     const { route } = h.props
     const query = queryOf(route)
     // The header shrinks once there is something else to look at
@@ -166,11 +234,12 @@ export const ShellNoDeps = Component.make({
           .key("not-found"),
     })
 
-    return h
+    // A drawer is a modal: nothing behind it can be reached while it is open
+    const modal = model.syncSettings || model.storeSearch || model.invite
+    const frame = h
       .div(
         h
           .header(
-            h.child(InviteDialog, { key: "invite" }),
             h
               .div(
                 h
@@ -206,7 +275,17 @@ export const ShellNoDeps = Component.make({
                     ),
                   ),
                 h
-                  .div(h.child(SyncSettingsPanel, { key: "sync-settings" }))
+                  .div(
+                    h
+                      .button(icon(h, "settings2", { class: "size-5" }))
+                      .ref(syncSettingsRef)
+                      .attr("type", "button")
+                      .attr("aria-label", "Sync settings")
+                      .class(
+                        "grid size-10 cursor-pointer place-items-center rounded-full text-white/90 transition-colors hover:bg-white/10 hover:text-white active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+                      )
+                      .onClick(Message.make({ _tag: "SyncSettingsOpened" })),
+                  )
                   .class("col-start-3 row-start-1 self-start justify-self-end"),
                 h
                   .div(
@@ -276,7 +355,28 @@ export const ShellNoDeps = Component.make({
           .main(h.div(page).class("container mx-auto max-w-7xl"))
           .class("flex-1 bg-canvas px-3 sm:px-6 pb-24"),
       )
+      .attr("inert", modal ? "" : undefined)
       .class("flex min-h-screen flex-col bg-brand")
+
+    return h.div(
+      frame,
+      h.child(InviteDialog, {
+        key: "invite",
+        onEmit: ({ _tag }) =>
+          Message.make({ _tag: "InviteChanged", open: _tag === "Opened" }),
+      }),
+      model.syncSettings &&
+        h.child(SyncSettingsPanel, {
+          key: "sync-settings",
+          onEmit: () => Message.make({ _tag: "SyncSettingsClosed" }),
+        }),
+      model.storeSearch &&
+        h.child(StoreSearch, {
+          key: "store-search",
+          onEmit: ({ store }) =>
+            Message.make({ _tag: "StoreSearchAnswered", store }),
+        }),
+    )
   },
 })
 
@@ -292,6 +392,7 @@ const Shared = Layer.mergeAll(
   Favorites.layer,
   SyncRemote.layer,
   Invites.layer,
+  StoreSearchPrompt.layer,
 )
 
 export const Shell = ShellNoDeps.pipe(
@@ -299,6 +400,7 @@ export const Shell = ShellNoDeps.pipe(
     Layer.mergeAll(
       SearchProducts.layer,
       ScrollToTop.layer,
+      AnswerStoreSearch.layer,
       ListFavoritesRefresh,
     ).pipe(Layer.provideMerge(Shared)),
   ),

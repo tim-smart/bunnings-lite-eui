@@ -193,49 +193,43 @@ test("stores: the keyboard picks a nearby store", async ({ page }) => {
     .toMatchObject({ code: "9518", city: "Grey Lynn" })
 })
 
-// Browsers without `interactivity: inert` rely on the drawer's own tab stops
-for (const inert of [true, false]) {
-  test(`stores: Tab stays inside the store search ${inert ? "with" : "without"} an inert page`, async ({
-    page,
-  }) => {
-    await mockRpc(page)
-    await page.goto("/")
-    if (!inert) {
-      await page.addStyleTag({
-        content: "* { interactivity: auto !important; }",
-      })
-    }
+test("stores: the store search is modal", async ({ page }) => {
+  await mockRpc(page)
+  await page.goto("/")
+  // As in Firefox and Safari: the page has to be inert without CSS `interactivity`
+  await page.addStyleTag({ content: "* { interactivity: auto !important; }" })
 
-    const open = page.getByRole("button", { name: "Search all stores" })
-    await open.focus()
-    await page.keyboard.press("Enter")
+  const open = page.getByRole("button", { name: "Search all stores" })
+  await open.focus()
+  await page.keyboard.press("Enter")
 
-    const drawer = page.getByRole("dialog", { name: "Find your store" })
-    const search = drawer.getByRole("searchbox", { name: "Search stores" })
-    const first = drawer.getByRole("button", { name: /Grey Lynn/ })
-    const last = drawer.getByRole("button", { name: /Rozelle/ })
+  const drawer = page.getByRole("dialog", { name: "Find your store" })
+  const search = drawer.getByRole("searchbox", { name: "Search stores" })
+  const first = drawer.getByRole("button", { name: /Grey Lynn/ })
+  const last = drawer.getByRole("button", { name: /Rozelle/ })
+  await expect(search).toBeFocused()
+  await expect(last).toBeVisible()
+
+  // Nothing behind the drawer can take focus
+  for (const behind of [
+    'select[aria-label="Your store"]',
+    'input[aria-label="Search for products"]',
+    'button[aria-label="Sync settings"]',
+  ]) {
+    await page.locator(behind).evaluate((el: HTMLElement) => el.focus())
     await expect(search).toBeFocused()
-    await expect(last).toBeVisible()
+  }
 
-    // The page behind can't take focus where the browser can make it inert
-    await page.getByRole("combobox", { name: "Your store" }).focus()
-    if (inert) {
-      await expect(search).toBeFocused()
-    } else {
-      await search.focus()
-    }
+  await page.keyboard.press("Tab")
+  await expect(first).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(last).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(search).toBeFocused()
+  await page.keyboard.press("Shift+Tab")
+  await expect(last).toBeFocused()
 
-    await page.keyboard.press("Tab")
-    await expect(first).toBeFocused()
-    await page.keyboard.press("Tab")
-    await expect(last).toBeFocused()
-    await page.keyboard.press("Tab")
-    await expect(search).toBeFocused()
-    await page.keyboard.press("Shift+Tab")
-    await expect(last).toBeFocused()
-
-    await page.keyboard.press("Escape")
-    await expect(drawer).toBeHidden()
-    await expect(open).toBeFocused()
-  })
-}
+  await page.keyboard.press("Escape")
+  await expect(drawer).toBeHidden()
+  await expect(open).toBeFocused()
+})
