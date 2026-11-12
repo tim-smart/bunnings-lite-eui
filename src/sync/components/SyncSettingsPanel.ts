@@ -2,15 +2,8 @@ import * as Clipboard from "@effect/platform-browser/Clipboard"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { AsyncResult, Loader } from "effect/reactivity"
 import { Command, Component, Subscription } from "effect/ui"
-import { Html } from "effect/ui/html"
 import { buttonClass, inputClass } from "../../design/classes.ts"
-import {
-  drawer,
-  drawerFooter,
-  drawerHeader,
-  FocusWrap,
-  wrapFocus,
-} from "../../design/drawer.ts"
+import { drawer, drawerFooter, drawerHeader } from "../../design/drawer.ts"
 import { icon } from "../../design/icons.ts"
 import { skeleton } from "../../design/skeleton.ts"
 import { GetSyncSettings } from "../loaders/GetSyncSettings.ts"
@@ -26,7 +19,6 @@ export const SyncSettingsPanelMessage = Schema.TaggedUnion({
   CopyPressed: {},
   Copied: { copied: Schema.Boolean },
   CopiedExpired: {},
-  FocusWrapped: { wrap: FocusWrap },
   Done: {},
   SettingsChanged: { snapshot: SettingsSnapshot },
 })
@@ -76,11 +68,6 @@ export class CopyInvite extends Command.Service<CopyInvite>()(
   }),
 ) {}
 
-const panelRef = Html.ref("sync-settings-close", "button")
-const remoteUrlRef = Html.ref("sync-settings-remote-url", "input")
-const focusWrapped = (wrap: FocusWrap) =>
-  Message.make({ _tag: "FocusWrapped", wrap })
-
 const done = Command.map(() => Message.make({ _tag: "Done" }))
 
 // The URL a remote field holds: none when blank, and nothing to save while
@@ -109,10 +96,7 @@ export const SyncSettingsPanelNoDeps = Component.make({
   loaders: {
     settings: () => ({}),
   },
-  init: ($) =>
-    $.set({ ...$.empty, remoteUrl: null, copied: false }).run(
-      Html.focus(panelRef, () => Message.make({ _tag: "Done" })),
-    ),
+  init: ($) => ({ ...$.empty, remoteUrl: null, copied: false }),
   update: (model, message, $) =>
     Message.match(message, {
       Closed: () =>
@@ -133,15 +117,6 @@ export const SyncSettingsPanelNoDeps = Component.make({
         ),
       Copied: ({ copied }) => ({ ...model, copied }),
       CopiedExpired: () => ({ ...model, copied: false }),
-      FocusWrapped: ({ wrap }) =>
-        $.run(
-          wrapFocus(
-            wrap,
-            // The fields aren't there until the settings have loaded
-            { first: remoteUrlRef, last: panelRef },
-            { done: Message.make({ _tag: "Done" }), onWrap: focusWrapped },
-          ),
-        ),
       Done: () => model,
       SettingsChanged: ({ snapshot }) => ({ ...model, settings: snapshot }),
     }),
@@ -169,7 +144,6 @@ export const SyncSettingsPanelNoDeps = Component.make({
       {
         titleId: "sync-settings-title",
         onClose: Message.make({ _tag: "Closed" }),
-        onWrap: focusWrapped,
       },
       drawerHeader(
         h,
@@ -190,7 +164,6 @@ export const SyncSettingsPanelNoDeps = Component.make({
                   "Remote URL",
                   h
                     .input()
-                    .ref(remoteUrlRef)
                     .id("remote-url")
                     .attr("placeholder", "https://")
                     .class(inputClass())
@@ -254,7 +227,8 @@ export const SyncSettingsPanelNoDeps = Component.make({
         h,
         h
           .button("Close")
-          .ref(panelRef)
+          // The fields above load after the sheet opens
+          .attr("autofocus", "")
           .attr("type", "button")
           .class(buttonClass({ variant: "outline" }))
           .onClick(Message.make({ _tag: "Closed" })),

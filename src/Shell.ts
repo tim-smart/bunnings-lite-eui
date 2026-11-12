@@ -96,9 +96,7 @@ const noStoreFound = AnswerStoreSearch.make({ store: Option.none() }).pipe(done)
  * the sync settings, and the page the route names. It is mounted once any
  * pending join is finished, and provides the services its pages share.
  *
- * The drawers are mounted here too, beside the page instead of inside it.
- * A drawer is a modal, so the page is `inert` while one is open, and that
- * can't be undone for anything inside it. Only one is open at a time. An
+ * The drawers are mounted here too, because only one is open at a time. An
  * invite can arrive at any moment, and closes whichever is open.
  */
 export const ShellNoDeps = Component.make({
@@ -382,7 +380,6 @@ export const ShellNoDeps = Component.make({
           .main(h.div(page).class("container mx-auto max-w-7xl"))
           .class("flex-1 bg-canvas px-3 sm:px-6 pb-24"),
       )
-      .attr("inert", model.drawer === null ? undefined : "")
       .class("flex min-h-screen flex-col bg-brand")
 
     return h.div(

@@ -220,14 +220,20 @@ test("stores: the store search is modal", async ({ page }) => {
     await expect(search).toBeFocused()
   }
 
+  // Tab moves through the drawer, and past its end leaves the page rather
+  // than reaching what is behind
   await page.keyboard.press("Tab")
   await expect(first).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(last).toBeFocused()
-  await page.keyboard.press("Tab")
-  await expect(search).toBeFocused()
-  await page.keyboard.press("Shift+Tab")
-  await expect(last).toBeFocused()
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("Tab")
+    const behind = await page.evaluate(() => {
+      const active = document.activeElement
+      return active !== document.body && active?.closest("dialog") === null
+    })
+    expect(behind).toBe(false)
+  }
 
   await page.keyboard.press("Escape")
   await expect(drawer).toBeHidden()

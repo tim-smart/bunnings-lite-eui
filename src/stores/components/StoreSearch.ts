@@ -1,18 +1,12 @@
 import { Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult, Loader } from "effect/reactivity"
 import { Command, Component } from "effect/ui"
-import { Html } from "effect/ui/html"
 import {
   SessionLocation,
   type Store,
 } from "../../../server/src/domain/Bunnings.ts"
 import { buttonClass, inputClass } from "../../design/classes.ts"
-import {
-  drawer,
-  drawerHeader,
-  FocusWrap,
-  wrapFocus,
-} from "../../design/drawer.ts"
+import { drawer, drawerHeader } from "../../design/drawer.ts"
 import { icon } from "../../design/icons.ts"
 import { skeleton } from "../../design/skeleton.ts"
 import { Session } from "../../rpc/services/Session.ts"
@@ -27,7 +21,6 @@ export const StoreSearchMessage = Schema.TaggedUnion({
   StoreChosen: { location: SessionLocation },
   Closed: {},
   Retried: {},
-  FocusWrapped: { wrap: FocusWrap },
   Done: {},
   CurrentChanged: { snapshot: CurrentSnapshot },
   AllChanged: { snapshot: AllSnapshot },
@@ -46,12 +39,7 @@ export class RetryAllStores extends Command.Service<RetryAllStores>()(
   Effect.succeed(() => Effect.void),
 ) {}
 
-const searchRef = Html.ref("store-search", "input")
-const lastRef = Html.ref("store-search-last", "button")
-
 const done = Command.map(() => Message.make({ _tag: "Done" }))
-const focusWrapped = (wrap: FocusWrap) =>
-  Message.make({ _tag: "FocusWrapped", wrap })
 
 const matches = (store: Store, terms: ReadonlyArray<string>) => {
   const text = [
@@ -84,10 +72,7 @@ export const StoreSearchNoDeps = Component.make({
     current: () => ({}),
     all: () => ({}),
   },
-  init: ($) =>
-    $.set({ ...$.empty, search: "" }).run(
-      Html.focus(searchRef, () => Message.make({ _tag: "Done" })),
-    ),
+  init: ($) => ({ ...$.empty, search: "" }),
   update: (model, message, $) =>
     Message.match(message, {
       SearchTyped: ({ text }) => ({ ...model, search: text }),
@@ -103,14 +88,6 @@ export const StoreSearchNoDeps = Component.make({
           StoreSearchEvents.make({ _tag: "Answered", store: Option.none() }),
         ),
       Retried: () => $.run(RetryAllStores.make().pipe(done)),
-      FocusWrapped: ({ wrap }) =>
-        $.run(
-          wrapFocus(
-            wrap,
-            { first: searchRef, last: lastRef },
-            { done: Message.make({ _tag: "Done" }), onWrap: focusWrapped },
-          ),
-        ),
       Done: () => model,
       CurrentChanged: ({ snapshot }) => ({ ...model, current: snapshot }),
       AllChanged: ({ snapshot }) => ({ ...model, all: snapshot }),
@@ -131,7 +108,6 @@ export const StoreSearchNoDeps = Component.make({
       {
         titleId: "store-search-title",
         onClose: Message.make({ _tag: "Closed" }),
-        onWrap: focusWrapped,
         class: "h-[80vh]",
       },
       drawerHeader(
@@ -149,7 +125,7 @@ export const StoreSearchNoDeps = Component.make({
               }),
               h
                 .input()
-                .ref(searchRef)
+                .attr("autofocus", "")
                 .attr("type", "search")
                 .attr("aria-label", "Search stores")
                 .attr("placeholder", "Store, suburb or postcode")
@@ -173,7 +149,6 @@ export const StoreSearchNoDeps = Component.make({
                       h.p("Couldn't load stores.").attr("role", "status"),
                       h
                         .button("Try again")
-                        .ref(lastRef)
                         .attr("type", "button")
                         .class(buttonClass({ variant: "outline" }))
                         .onClick(Message.make({ _tag: "Retried" })),
@@ -202,9 +177,6 @@ export const StoreSearchNoDeps = Component.make({
                       a.displayName.localeCompare(b.displayName),
                     )
                   }
-                  // Where Shift+Tab from the search box carries on from
-                  const lastCountry = Array.from(countries.values()).pop()
-                  const last = lastCountry?.[lastCountry.length - 1]
                   const item = (store: Store) => {
                     const button = h
                       .button(
@@ -238,9 +210,7 @@ export const StoreSearchNoDeps = Component.make({
                           location: SessionLocation.fromStore(store),
                         }),
                       )
-                    return h
-                      .li(store === last ? button.ref(lastRef) : button)
-                      .key(store.name)
+                    return h.li(button).key(store.name)
                   }
                   return Array.from(countries, ([country, stores]) =>
                     h
