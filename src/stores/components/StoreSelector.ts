@@ -7,7 +7,12 @@ import {
   type Store,
 } from "../../../server/src/domain/Bunnings.ts"
 import { buttonClass, inputClass } from "../../design/classes.ts"
-import { drawer, drawerHeader } from "../../design/drawer.ts"
+import {
+  drawer,
+  drawerHeader,
+  FocusWrap,
+  wrapFocus,
+} from "../../design/drawer.ts"
 import { icon } from "../../design/icons.ts"
 import { skeleton } from "../../design/skeleton.ts"
 import { cn } from "../../lib/utils.ts"
@@ -22,15 +27,19 @@ const NearbySnapshot = Loader.Snapshot(NearbyStores, "nearby")
 const AllSnapshot = Loader.Snapshot(AllStores, "all")
 
 export const StoreSelectorMessage = Schema.TaggedUnion({
-  Toggled: {},
-  Closed: {},
+  Reached: {},
   StoreChosen: { location: SessionLocation },
   SearchOpened: {},
   SearchClosed: {},
   SearchTyped: { text: Schema.String },
   Retried: {},
+  FocusWrapped: { wrap: FocusWrap },
   Done: {},
-  CurrentChanged: { snapshot: CurrentSnapshot },
+  CurrentChanged: {
+    snapshot: CurrentSnapshot,
+    /** The code of the store the session has, once it is known. */
+    code: Schema.NullOr(Schema.String),
+  },
   NearbyChanged: { snapshot: NearbySnapshot },
   AllChanged: { snapshot: AllSnapshot },
 })
@@ -57,13 +66,13 @@ export class RetryAllStores extends Command.Service<RetryAllStores>()(
   Effect.succeed(() => Effect.void),
 ) {}
 
-const triggerRef = Html.ref("store-trigger", "button")
+const searchButtonRef = Html.ref("store-search-open", "button")
 const searchRef = Html.ref("store-search", "input")
+const lastRef = Html.ref("store-search-last", "button")
 
 const done = Command.map(() => Message.make({ _tag: "Done" }))
-
-const optionClass =
-  "relative flex w-full cursor-pointer items-center gap-2 rounded-sm py-3 pr-8 pl-2 text-left text-sm outline-none select-none hover:bg-muted hover:text-primary focus-visible:bg-muted focus-visible:text-primary focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&_svg]:size-4 [&_svg]:shrink-0"
+const focusWrapped = (wrap: FocusWrap) =>
+  Message.make({ _tag: "FocusWrapped", wrap })
 
 const matches = (store: Store, terms: ReadonlyArray<string>) => {
   const text = [
@@ -81,12 +90,18 @@ const matches = (store: Store, terms: ReadonlyArray<string>) => {
 /**
  * Chooses the store to shop at: from the ten nearest, which asks for the
  * device's location, or by searching every store by hand.
+ *
+ * The nearest stores are a native `select`, so the keyboard and a phone's
+ * own picker work without any handling here. The chosen store is marked on
+ * its `option`: a `value` on the `select` is set before it has options.
  */
 export const StoreSelectorNoDeps = Component.make({
   name: "StoreSelector",
   model: Schema.Struct({
-    /** Whether the list of nearby stores is open. */
-    open: Schema.Boolean,
+    /** Whether the nearby stores have been asked for. */
+    nearbyWanted: Schema.Boolean,
+    /** The store just chosen, until the session has it too. */
+    chosen: Schema.NullOr(SessionLocation),
     /** Whether the search of every store is open. */
     searching: Schema.Boolean,
     search: Schema.String,
@@ -98,103 +113,91 @@ export const StoreSelectorNoDeps = Component.make({
   loaders: {
     current: () => ({}),
     // Asking for nearby stores asks for the device's location, so it waits
-    // until the list is opened
-    nearby: (model) => (model.open ? {} : undefined),
+    // until the picker is reached for
+    nearby: (model) => (model.nearbyWanted ? {} : undefined),
     all: (model) => (model.searching ? {} : undefined),
   },
-  init: ($) => ({ ...$.empty, open: false, searching: false, search: "" }),
+  init: ($) => ({
+    ...$.empty,
+    nearbyWanted: false,
+    chosen: null,
+    searching: false,
+    search: "",
+  }),
   update: (model, message, $) =>
     Message.match(message, {
-      Toggled: () => ({ ...model, open: !model.open }),
-      Closed: () =>
-        $.set({ ...model, open: false }).run(
-          Html.focus(triggerRef, () => Message.make({ _tag: "Done" })),
-        ),
-      StoreChosen: ({ location }) =>
-        $.set({ ...model, open: false, searching: false }).run(
-          ChooseStore.make({ location }).pipe(done),
-          Html.focus(triggerRef, () => Message.make({ _tag: "Done" })),
-        ),
+      Reached: () =>
+        model.nearbyWanted ? model : { ...model, nearbyWanted: true },
+      StoreChosen: ({ location }) => {
+        const next = { ...model, chosen: location, searching: false }
+        const choose = ChooseStore.make({ location }).pipe(done)
+        return model.searching
+          ? $.set(next).run(
+              choose,
+              Html.focus(searchButtonRef, () => Message.make({ _tag: "Done" })),
+            )
+          : $.set(next).run(choose)
+      },
       SearchOpened: () =>
-        $.set({ ...model, open: false, searching: true, search: "" }).run(
+        $.set({ ...model, searching: true, search: "" }).run(
           Html.focus(searchRef, () => Message.make({ _tag: "Done" })),
         ),
       SearchClosed: () =>
         $.set({ ...model, searching: false }).run(
-          Html.focus(triggerRef, () => Message.make({ _tag: "Done" })),
+          Html.focus(searchButtonRef, () => Message.make({ _tag: "Done" })),
         ),
       SearchTyped: ({ text }) => ({ ...model, search: text }),
       Retried: () => $.run(RetryAllStores.make().pipe(done)),
+      FocusWrapped: ({ wrap }) =>
+        $.run(
+          wrapFocus(
+            wrap,
+            { first: searchRef, last: lastRef },
+            { done: Message.make({ _tag: "Done" }), onWrap: focusWrapped },
+          ),
+        ),
       Done: () => model,
-      CurrentChanged: ({ snapshot }) => ({ ...model, current: snapshot }),
+      CurrentChanged: ({ snapshot, code }) => ({
+        ...model,
+        current: snapshot,
+        chosen: model.chosen?.code === code ? null : model.chosen,
+      }),
       NearbyChanged: ({ snapshot }) => ({ ...model, nearby: snapshot }),
       AllChanged: ({ snapshot }) => ({ ...model, all: snapshot }),
     }),
   subscriptions: (_model, _props, $) => [
     $.watch({
-      current: (snapshot) => Message.make({ _tag: "CurrentChanged", snapshot }),
+      current: (snapshot, loaded) =>
+        Message.make({
+          _tag: "CurrentChanged",
+          snapshot,
+          code: Option.match(Option.flatten(AsyncResult.value(loaded)), {
+            onNone: () => null,
+            onSome: (location) => location.code,
+          }),
+        }),
       nearby: (snapshot) => Message.make({ _tag: "NearbyChanged", snapshot }),
       all: (snapshot) => Message.make({ _tag: "AllChanged", snapshot }),
     }),
   ],
   view: (model, h) => {
     const current = Option.flatten(AsyncResult.value(h.loaded.current))
-    const isCurrent = (code: string) =>
-      Option.exists(current, (location) => location.code === code)
+    const shown = model.chosen === null ? current : Option.some(model.chosen)
+    const isShown = (code: string) =>
+      Option.exists(shown, (location) => location.code === code)
 
-    const option = (label: string, location: SessionLocation) =>
-      h
-        .button(
-          label,
-          isCurrent(location.code) &&
-            h
-              .span(icon(h, "check", { class: "text-primary" }))
-              .class(
-                "absolute right-2 flex size-3.5 items-center justify-center",
-              ),
-        )
-        .attr("type", "button")
-        .attr("role", "option")
-        .attr("aria-selected", String(isCurrent(location.code)))
-        .class(optionClass)
-        .onClick(Message.make({ _tag: "StoreChosen", location }))
-        .key(location.code)
-
-    // A store chosen by search stays in the list when it isn't nearby
-    const currentOption = (nearby: ReadonlyArray<Store>) =>
-      Option.match(current, {
-        onNone: () => undefined,
-        onSome: (location) =>
-          nearby.some((store) => store.name === location.code)
-            ? undefined
-            : option(location.city, location),
-      })
-
-    const note = (text: string) =>
-      h
-        .p(text)
-        .attr("role", "status")
-        .class("px-2 py-3 text-sm text-muted-foreground")
-
-    const nearbyOptions = AsyncResult.match(h.loaded.nearby, {
-      onInitial: () => [
-        currentOption([]),
-        ...[0, 1, 2, 3, 4].map((i) =>
-          skeleton(h, "h-8 m-2").key(`skeleton-${i}`),
-        ),
-      ],
-      onFailure: () => [
-        currentOption([]),
-        note("Couldn't find stores near you."),
-      ],
-      onSuccess: ({ value: stores }) => [
-        currentOption(stores),
-        stores.length === 0 && note("No stores found near you."),
-        ...stores.map((store) =>
-          option(store.displayName, SessionLocation.fromStore(store)),
-        ),
-      ],
-    })
+    const nearby = Option.getOrElse(
+      AsyncResult.value(h.loaded.nearby),
+      (): ReadonlyArray<Store> => [],
+    )
+    const nearbyStatus = !model.nearbyWanted
+      ? ""
+      : AsyncResult.match(h.loaded.nearby, {
+          onInitial: () => "Finding stores near you…",
+          onFailure: () => "Couldn't find stores near you.",
+          onSuccess: ({ value }) =>
+            value.length === 0 ? "No stores found near you." : "",
+        })
 
     const storeSearch = () => {
       const terms = model.search.toLowerCase().split(/\s+/).filter(Boolean)
@@ -203,6 +206,7 @@ export const StoreSelectorNoDeps = Component.make({
         {
           titleId: "store-search-title",
           onClose: Message.make({ _tag: "SearchClosed" }),
+          onWrap: focusWrapped,
           class: "h-[80vh]",
         },
         drawerHeader(
@@ -244,6 +248,7 @@ export const StoreSelectorNoDeps = Component.make({
                         h.p("Couldn't load stores.").attr("role", "status"),
                         h
                           .button("Try again")
+                          .ref(lastRef)
                           .attr("type", "button")
                           .class(buttonClass({ variant: "outline" }))
                           .onClick(Message.make({ _tag: "Retried" })),
@@ -261,47 +266,6 @@ export const StoreSelectorNoDeps = Component.make({
                         .attr("role", "status")
                         .class("py-8 text-center text-sm text-muted-foreground")
                     }
-                    const item = (store: Store) =>
-                      h
-                        .li(
-                          h
-                            .button(
-                              icon(h, "mapPin", {
-                                class: "size-4 shrink-0 text-accent",
-                              }),
-                              h
-                                .span(
-                                  h
-                                    .span(store.displayName)
-                                    .class("font-medium text-primary"),
-                                  h
-                                    .span(store.address.formattedAddress)
-                                    .class(
-                                      "truncate text-xs text-muted-foreground",
-                                    ),
-                                )
-                                .class("flex min-w-0 flex-1 flex-col"),
-                              isCurrent(store.name) &&
-                                icon(h, "check", {
-                                  class: "size-4 text-primary",
-                                }),
-                            )
-                            .attr("type", "button")
-                            .attr(
-                              "aria-current",
-                              isCurrent(store.name) ? "true" : undefined,
-                            )
-                            .class(
-                              "flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
-                            )
-                            .onClick(
-                              Message.make({
-                                _tag: "StoreChosen",
-                                location: SessionLocation.fromStore(store),
-                              }),
-                            ),
-                        )
-                        .key(store.name)
                     const countries = new Map<string, Array<Store>>()
                     for (const store of found) {
                       const country = store.address.country.name
@@ -309,6 +273,53 @@ export const StoreSelectorNoDeps = Component.make({
                         ...(countries.get(country) ?? []),
                         store,
                       ])
+                    }
+                    for (const stores of countries.values()) {
+                      stores.sort((a, b) =>
+                        a.displayName.localeCompare(b.displayName),
+                      )
+                    }
+                    // Where Shift+Tab from the search box carries on from
+                    const lastCountry = Array.from(countries.values()).pop()
+                    const last = lastCountry?.[lastCountry.length - 1]
+                    const item = (store: Store) => {
+                      const button = h
+                        .button(
+                          icon(h, "mapPin", {
+                            class: "size-4 shrink-0 text-accent",
+                          }),
+                          h
+                            .span(
+                              h
+                                .span(store.displayName)
+                                .class("font-medium text-primary"),
+                              h
+                                .span(store.address.formattedAddress)
+                                .class(
+                                  "truncate text-xs text-muted-foreground",
+                                ),
+                            )
+                            .class("flex min-w-0 flex-1 flex-col"),
+                          isShown(store.name) &&
+                            icon(h, "check", { class: "size-4 text-primary" }),
+                        )
+                        .attr("type", "button")
+                        .attr(
+                          "aria-current",
+                          isShown(store.name) ? "true" : undefined,
+                        )
+                        .class(
+                          "flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
+                        )
+                        .onClick(
+                          Message.make({
+                            _tag: "StoreChosen",
+                            location: SessionLocation.fromStore(store),
+                          }),
+                        )
+                      return h
+                        .li(store === last ? button.ref(lastRef) : button)
+                        .key(store.name)
                     }
                     return Array.from(countries, ([country, stores]) =>
                       h
@@ -318,15 +329,7 @@ export const StoreSelectorNoDeps = Component.make({
                             .class(
                               "sticky top-0 bg-background py-2 text-sm font-semibold text-primary",
                             ),
-                          h
-                            .ul(
-                              [...stores]
-                                .sort((a, b) =>
-                                  a.displayName.localeCompare(b.displayName),
-                                )
-                                .map(item),
-                            )
-                            .class("flex flex-col"),
+                          h.ul(stores.map(item)).class("flex flex-col"),
                         )
                         .attr("aria-label", country)
                         .class("pb-4")
@@ -344,78 +347,96 @@ export const StoreSelectorNoDeps = Component.make({
     return h
       .div(
         h
-          .button(
+          .div(
+            icon(h, "mapPin", {
+              class:
+                "pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-accent",
+            }),
             h
-              .span(
-                icon(h, "mapPin", { class: "size-5 mr-2 text-accent" }),
-                Option.match(current, {
+              .select(
+                Option.match(shown, {
                   onNone: () =>
-                    h.span("Select your store").class("text-muted-foreground"),
-                  onSome: (location) => h.span(location.city),
+                    h
+                      .option("Select your store")
+                      .attr("value", "")
+                      .attr("hidden", "")
+                      .disabled(true)
+                      .selected(true)
+                      .key("none"),
+                  // A store chosen by search stays in the list when it isn't nearby
+                  onSome: (location) =>
+                    nearby.some((store) => store.name === location.code)
+                      ? undefined
+                      : h
+                          .option(location.city)
+                          .attr("value", location.code)
+                          .selected(true)
+                          .key(location.code),
                 }),
+                // What a list opened too early has to offer
+                model.nearbyWanted &&
+                  AsyncResult.isInitial(h.loaded.nearby) &&
+                  h.option("Loading…").disabled(true).key("loading"),
+                nearby.length > 0 &&
+                  h
+                    .optgroup(
+                      nearby.map((store) =>
+                        h
+                          .option(store.displayName)
+                          .attr("value", store.name)
+                          .selected(isShown(store.name))
+                          .key(store.name),
+                      ),
+                    )
+                    .attr("label", "Near you")
+                    .key("nearby"),
               )
-              .class("flex items-center"),
-            icon(h, "chevronDown", { class: "size-4 opacity-50" }),
+              .attr("aria-label", "Your store")
+              .class(
+                cn(
+                  "h-11 w-full cursor-pointer appearance-none rounded-md border border-input bg-card py-2 pr-9 pl-10 text-sm font-medium text-foreground outline-none transition-[color,box-shadow] hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15",
+                  Option.isNone(shown) && "text-muted-foreground",
+                ),
+              )
+              .onFocus(Message.make({ _tag: "Reached" }))
+              .onChange(({ value }) => {
+                const store = nearby.find((store) => store.name === value)
+                return store === undefined
+                  ? undefined
+                  : Message.make({
+                      _tag: "StoreChosen",
+                      location: SessionLocation.fromStore(store),
+                    })
+              }),
+            icon(h, "chevronDown", {
+              class:
+                "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 opacity-50",
+            }),
           )
-          .ref(triggerRef)
-          .attr("type", "button")
-          .attr("role", "combobox")
-          .attr("aria-haspopup", "listbox")
-          .attr("aria-expanded", String(model.open))
-          .attr("aria-controls", "store-options")
-          .class(
-            cn(
-              "flex h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-card px-3 py-2 text-sm font-medium whitespace-nowrap text-foreground outline-none transition-[color,box-shadow] hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15",
-              model.open && "border-primary",
-            ),
+          .class("relative"),
+        h
+          .div(
+            h
+              .p(nearbyStatus)
+              // Always here, so what it comes to say is announced
+              .attr("aria-live", "polite")
+              .class("text-sm text-muted-foreground"),
+            h
+              .button(
+                icon(h, "search", { class: "size-4" }),
+                "Search all stores",
+              )
+              .ref(searchButtonRef)
+              .attr("type", "button")
+              .class(
+                "ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-primary/15",
+              )
+              .onClick(Message.make({ _tag: "SearchOpened" })),
           )
-          .onClick(Message.make({ _tag: "Toggled" })),
-        model.open && [
-          // Catches a press anywhere else, which closes the list
-          h
-            .div()
-            .class("fixed inset-0 z-40")
-            .attr("aria-hidden", "true")
-            .onClick(Message.make({ _tag: "Closed" }))
-            .key("away"),
-          h
-            .div(
-              h
-                .div("Select your store")
-                .id("store-options-label")
-                .class("px-2 py-1.5 text-xs font-bold text-muted-foreground"),
-              nearbyOptions,
-              h
-                .div()
-                .attr("role", "separator")
-                .class("bg-border pointer-events-none -mx-1 my-1 h-px"),
-              h
-                .button(
-                  icon(h, "search", { class: "text-primary" }),
-                  "Search all stores",
-                )
-                .attr("type", "button")
-                .attr("role", "option")
-                .attr("aria-selected", "false")
-                .class(optionClass)
-                .onClick(Message.make({ _tag: "SearchOpened" })),
-            )
-            .id("store-options")
-            .attr("role", "listbox")
-            .attr("aria-labelledby", "store-options-label")
-            .class(
-              "absolute inset-x-0 top-full z-50 mt-1 max-h-96 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
-            )
-            .key("options"),
-        ],
+          .class("mt-2 flex items-center gap-3"),
         model.searching && storeSearch(),
       )
-      .class("relative w-full")
-      .onKeyDown(({ key }) =>
-        key === "Escape" && model.open
-          ? Message.make({ _tag: "Closed" })
-          : undefined,
-      )
+      .class("w-full")
   },
 })
 

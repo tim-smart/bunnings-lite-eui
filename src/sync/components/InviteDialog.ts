@@ -3,7 +3,13 @@ import { AsyncResult, Loader } from "effect/reactivity"
 import { Command, Component, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { buttonClass } from "../../design/classes.ts"
-import { drawer, drawerFooter, drawerHeader } from "../../design/drawer.ts"
+import {
+  drawer,
+  drawerFooter,
+  drawerHeader,
+  FocusWrap,
+  wrapFocus,
+} from "../../design/drawer.ts"
 import { PendingInvite } from "../domain/Invite.ts"
 import { GetSyncSettings } from "../loaders/GetSyncSettings.ts"
 import { Invites } from "../services/Invites.ts"
@@ -15,6 +21,7 @@ export const InviteDialogMessage = Schema.TaggedUnion({
   InviteOpened: { invite: PendingInvite },
   Dismissed: {},
   Joined: {},
+  FocusWrapped: { wrap: FocusWrap },
   Done: {},
   SettingsChanged: { snapshot: SettingsSnapshot },
 })
@@ -45,6 +52,9 @@ const invitesOpened = Subscription.make(
 )
 
 const dismissRef = Html.ref("invite-dismiss", "button")
+const joinRef = Html.ref("invite-join", "button")
+const focusWrapped = (wrap: FocusWrap) =>
+  Message.make({ _tag: "FocusWrapped", wrap })
 
 /**
  * Asks before joining through an invite link the page was opened with, and
@@ -75,6 +85,15 @@ export const InviteDialogNoDeps = Component.make({
             Command.map(() => Message.make({ _tag: "Done" })),
           ),
         ),
+      FocusWrapped: ({ wrap }) =>
+        $.run(
+          wrapFocus(
+            wrap,
+            // A link that isn't valid has no Join button
+            { first: dismissRef, last: joinRef },
+            { done: Message.make({ _tag: "Done" }), onWrap: focusWrapped },
+          ),
+        ),
       Done: () => model,
       SettingsChanged: ({ snapshot }) => ({ ...model, settings: snapshot }),
     }),
@@ -93,7 +112,7 @@ export const InviteDialogNoDeps = Component.make({
     if (invite._tag === "Invalid") {
       return drawer(
         h,
-        { titleId: "invite-title", onClose: dismissed },
+        { titleId: "invite-title", onClose: dismissed, onWrap: focusWrapped },
         drawerHeader(
           h,
           { titleId: "invite-title", title: "Invite link not valid" },
@@ -117,7 +136,7 @@ export const InviteDialogNoDeps = Component.make({
     )
     return drawer(
       h,
-      { titleId: "invite-title", onClose: dismissed },
+      { titleId: "invite-title", onClose: dismissed, onWrap: focusWrapped },
       drawerHeader(
         h,
         { titleId: "invite-title", title: "Join shared sync?" },
@@ -163,6 +182,7 @@ export const InviteDialogNoDeps = Component.make({
           .onClick(dismissed),
         h
           .button("Join")
+          .ref(joinRef)
           .attr("type", "button")
           .class(buttonClass())
           .onClick(Message.make({ _tag: "Joined" })),

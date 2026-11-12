@@ -4,7 +4,13 @@ import { AsyncResult, Loader } from "effect/reactivity"
 import { Command, Component, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { buttonClass, inputClass } from "../../design/classes.ts"
-import { drawer, drawerFooter, drawerHeader } from "../../design/drawer.ts"
+import {
+  drawer,
+  drawerFooter,
+  drawerHeader,
+  FocusWrap,
+  wrapFocus,
+} from "../../design/drawer.ts"
 import { icon } from "../../design/icons.ts"
 import { skeleton } from "../../design/skeleton.ts"
 import { GetSyncSettings } from "../loaders/GetSyncSettings.ts"
@@ -21,6 +27,7 @@ export const SyncSettingsPanelMessage = Schema.TaggedUnion({
   CopyPressed: {},
   Copied: { copied: Schema.Boolean },
   CopiedExpired: {},
+  FocusWrapped: { wrap: FocusWrap },
   Done: {},
   SettingsChanged: {
     snapshot: SettingsSnapshot,
@@ -73,6 +80,9 @@ export class CopyInvite extends Command.Service<CopyInvite>()(
 
 const triggerRef = Html.ref("sync-settings-trigger", "button")
 const panelRef = Html.ref("sync-settings-close", "button")
+const remoteUrlRef = Html.ref("sync-settings-remote-url", "input")
+const focusWrapped = (wrap: FocusWrap) =>
+  Message.make({ _tag: "FocusWrapped", wrap })
 
 const done = Command.map(() => Message.make({ _tag: "Done" }))
 
@@ -138,6 +148,15 @@ export const SyncSettingsPanelNoDeps = Component.make({
         ),
       Copied: ({ copied }) => ({ ...model, copied }),
       CopiedExpired: () => ({ ...model, copied: false }),
+      FocusWrapped: ({ wrap }) =>
+        $.run(
+          wrapFocus(
+            wrap,
+            // The fields aren't there until the settings have loaded
+            { first: remoteUrlRef, last: panelRef },
+            { done: Message.make({ _tag: "Done" }), onWrap: focusWrapped },
+          ),
+        ),
       Done: () => model,
       SettingsChanged: ({ remoteUrl, snapshot }) => ({
         ...model,
@@ -177,6 +196,7 @@ export const SyncSettingsPanelNoDeps = Component.make({
         {
           titleId: "sync-settings-title",
           onClose: Message.make({ _tag: "Closed" }),
+          onWrap: focusWrapped,
         },
         drawerHeader(
           h,
@@ -197,6 +217,7 @@ export const SyncSettingsPanelNoDeps = Component.make({
                     "Remote URL",
                     h
                       .input()
+                      .ref(remoteUrlRef)
                       .id("remote-url")
                       .attr("placeholder", "https://")
                       .class(inputClass())

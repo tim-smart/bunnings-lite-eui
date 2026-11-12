@@ -129,9 +129,10 @@ for (const [reason, script] of Object.entries(failures)) {
     const calls = await mockRpc(page)
     await page.goto("/")
 
-    await page.getByRole("combobox").click()
+    // The picker is a native select: reaching for it asks for nearby stores
+    await page.getByRole("combobox").focus()
     await expect(page.getByText("Couldn't find stores near you.")).toBeVisible()
-    await page.getByRole("option", { name: "Search all stores" }).click()
+    await page.getByRole("button", { name: "Search all stores" }).click()
 
     const drawer = page.getByRole("dialog", { name: "Find your store" })
     await expect(
@@ -142,7 +143,9 @@ for (const [reason, script] of Object.entries(failures)) {
     await drawer.getByRole("button", { name: /Rozelle/ }).click()
 
     await expect(drawer).toBeHidden()
-    await expect(page.getByRole("combobox")).toHaveText("Rozelle")
+    await expect(
+      page.getByRole("combobox").locator("option:checked"),
+    ).toHaveText("Rozelle")
     await expect
       .poll(() => calls.logins.at(-1))
       .toMatchObject({ code: "7373", city: "Rozelle", website: "AU" })
@@ -159,13 +162,80 @@ test("stores: nearby stores come from the browser location", async ({
   const calls = await mockRpc(page)
   await page.goto("/")
 
-  await page.getByRole("combobox").click()
-  await page.getByRole("option", { name: "Grey Lynn" }).click()
+  await page.getByRole("combobox").focus()
+  await page.getByRole("combobox").selectOption({ label: "Grey Lynn" })
 
-  await expect(page.getByRole("combobox")).toHaveText("Grey Lynn")
+  await expect(page.getByRole("combobox").locator("option:checked")).toHaveText(
+    "Grey Lynn",
+  )
   expect(calls.nearby).toEqual([{ latitude: -36.85, longitude: 174.76 }])
   await expect
     .poll(() => calls.logins.at(-1))
     .toMatchObject({ code: "9518", city: "Grey Lynn", website: "NZ" })
   expect(calls.allStores).toBe(0)
 })
+
+test("stores: the keyboard picks a nearby store", async ({ page }) => {
+  await page.context().grantPermissions(["geolocation"])
+  await page.context().setGeolocation({ latitude: -36.85, longitude: 174.76 })
+  const calls = await mockRpc(page)
+  await page.goto("/")
+
+  const picker = page.getByRole("combobox", { name: "Your store" })
+  await picker.focus()
+  await expect(picker.getByRole("option", { name: "Grey Lynn" })).toBeAttached()
+  await page.keyboard.press("ArrowDown")
+
+  await expect(picker).toHaveValue("9518")
+  await expect(picker).toBeFocused()
+  await expect
+    .poll(() => calls.logins.at(-1))
+    .toMatchObject({ code: "9518", city: "Grey Lynn" })
+})
+
+// Browsers without `interactivity: inert` rely on the drawer's own tab stops
+for (const inert of [true, false]) {
+  test(`stores: Tab stays inside the store search ${inert ? "with" : "without"} an inert page`, async ({
+    page,
+  }) => {
+    await mockRpc(page)
+    await page.goto("/")
+    if (!inert) {
+      await page.addStyleTag({
+        content: "* { interactivity: auto !important; }",
+      })
+    }
+
+    const open = page.getByRole("button", { name: "Search all stores" })
+    await open.focus()
+    await page.keyboard.press("Enter")
+
+    const drawer = page.getByRole("dialog", { name: "Find your store" })
+    const search = drawer.getByRole("searchbox", { name: "Search stores" })
+    const first = drawer.getByRole("button", { name: /Grey Lynn/ })
+    const last = drawer.getByRole("button", { name: /Rozelle/ })
+    await expect(search).toBeFocused()
+    await expect(last).toBeVisible()
+
+    // The page behind can't take focus where the browser can make it inert
+    await page.getByRole("combobox", { name: "Your store" }).focus()
+    if (inert) {
+      await expect(search).toBeFocused()
+    } else {
+      await search.focus()
+    }
+
+    await page.keyboard.press("Tab")
+    await expect(first).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(last).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(search).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(last).toBeFocused()
+
+    await page.keyboard.press("Escape")
+    await expect(drawer).toBeHidden()
+    await expect(open).toBeFocused()
+  })
+}

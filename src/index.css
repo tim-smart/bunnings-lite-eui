@@ -238,3 +238,20 @@ body {
     opacity: 1;
   }
 }
+
+/*
+ * A drawer is a modal, so everything outside it is inert while it is open.
+ * Inertness can't be undone further down the tree. It is given to each
+ * element beside the path to the drawer instead of to the page. Browsers
+ * without `interactivity` keep focus in the drawer by its tab stops alone.
+ */
+@layer base {
+  :has(dialog[aria-modal="true"])
+    > :not(
+      dialog[aria-modal="true"],
+      :has(dialog[aria-modal="true"]),
+      [data-drawer-backdrop]
+    ) {
+    interactivity: inert;
+  }
+}
