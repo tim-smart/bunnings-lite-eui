@@ -118,12 +118,12 @@ export const InviteDialogNoDeps = Component.make({
         ),
         drawerFooter(
           h,
-          h
-            .button("Close")
+          h.button
             .ref(dismissRef)
             .attr("type", "button")
             .class(buttonClass({ variant: "outline" }))
-            .onClick(dismissed),
+            .onClick(dismissed)
+            .children("Close"),
         ),
       )
     }
@@ -139,50 +139,46 @@ export const InviteDialogNoDeps = Component.make({
         h,
         { titleId: "invite-title", title: "Join shared sync?" },
         "This invite connects this device to ",
-        h.span(invite.host).class("font-medium text-foreground"),
+        h.span.class("font-medium text-foreground").children(invite.host),
         " using the identity of whoever created it.",
       ),
-      h
-        .div(
-          h
-            .ul(
-              h.li(
-                "Everyone with this invite shares one set of favorites, with full access to read, change and clear them.",
-              ),
-              h.li(
-                "Joining discards this device's favorites and shows the shared ones instead. Favorites already synced stay on the server under this device's old identity, but you won't see them again unless you copy an invite link for it first.",
-              ),
-              h.li("Access can't be revoked later."),
-              h.li(
-                "This replaces this device's identity",
-                Option.match(currentRemote, {
-                  onNone: () => "",
-                  onSome: (host) => ` and its current remote (${host})`,
-                }),
-                ".",
-              ),
-            )
-            .class("list-disc pl-5 flex flex-col gap-1"),
-          h
-            .p(
-              "Bunnings Lite can't check who made an invite. Only join if you know the sender and were expecting it.",
-            )
-            .class("text-muted-foreground"),
-        )
-        .class("px-4 text-sm flex flex-col gap-3"),
+      h.div.class("px-4 text-sm flex flex-col gap-3").children(
+        h.ul.class("list-disc pl-5 flex flex-col gap-1").children(
+          h.li(
+            "Everyone with this invite shares one set of favorites, with full access to read, change and clear them.",
+          ),
+          h.li(
+            "Joining discards this device's favorites and shows the shared ones instead. Favorites already synced stay on the server under this device's old identity, but you won't see them again unless you copy an invite link for it first.",
+          ),
+          h.li("Access can't be revoked later."),
+          h.li(
+            "This replaces this device's identity",
+            Option.match(currentRemote, {
+              onNone: () => "",
+              onSome: (host) => ` and its current remote (${host})`,
+            }),
+            ".",
+          ),
+        ),
+        h.p
+          .class("text-muted-foreground")
+          .children(
+            "Bunnings Lite can't check who made an invite. Only join if you know the sender and were expecting it.",
+          ),
+      ),
       drawerFooter(
         h,
-        h
-          .button("Cancel")
+        h.button
           .ref(dismissRef)
           .attr("type", "button")
           .class(buttonClass({ variant: "outline" }))
-          .onClick(dismissed),
-        h
-          .button("Join")
+          .onClick(dismissed)
+          .children("Cancel"),
+        h.button
           .attr("type", "button")
           .class(buttonClass())
-          .onClick(Message.make({ _tag: "Joined" })),
+          .onClick(Message.make({ _tag: "Joined" }))
+          .children("Join"),
       ),
     )
   },

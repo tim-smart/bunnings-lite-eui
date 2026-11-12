@@ -13,11 +13,11 @@ export const richText = <Msg>(
     if (node.tag === "a") {
       return node.href === undefined
         ? h.span(...children)
-        : h
-            .a(...children)
+        : h.a
             .attr("href", node.href)
             .attr("target", "_blank")
             .attr("rel", "noopener noreferrer nofollow")
+            .children(...children)
     }
-    return h.el(node.tag, ...children)
+    return h.el(node.tag).children(...children)
   })

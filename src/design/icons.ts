@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { Html } from "effect/ui/html"
 import type { H } from "./h"
 
 type Shape = readonly [tag: string, attrs: Readonly<Record<string, string>>]
@@ -93,22 +93,21 @@ const shapes = {
 
 export type IconName = keyof typeof shapes
 
-/** An icon, drawn with the current text colour. Decorative: it has no name. */
+/**
+ * An icon, drawn with the current text colour. Decorative: it has no name.
+ * `key` keeps its node when it moves among siblings.
+ */
 export const icon = <Msg>(
   h: H<Msg>,
   name: IconName,
-  options?: { readonly class?: string; readonly strokeWidth?: number },
-) =>
-  h
-    .el(
-      "svg",
-      (shapes[name] as ReadonlyArray<Shape>).map(([tag, attrs]) =>
-        Object.entries(attrs).reduce(
-          (shape, [key, value]) => shape.attr(key, value),
-          h.el(tag),
-        ),
-      ),
-    )
+  options?: {
+    readonly class?: string
+    readonly strokeWidth?: number
+    readonly key?: string | undefined
+  },
+) => {
+  const svg = h.el("svg")
+  return (options?.key === undefined ? svg : svg.key(options.key))
     .attr("xmlns", "http://www.w3.org/2000/svg")
     .attr("width", "24")
     .attr("height", "24")
@@ -119,4 +118,13 @@ export const icon = <Msg>(
     .attr("stroke-linecap", "round")
     .attr("stroke-linejoin", "round")
     .attr("aria-hidden", "true")
-    .attr("class", cn("lucide", options?.class))
+    .attr("class", Html.classNames("lucide", options?.class))
+    .children(
+      (shapes[name] as ReadonlyArray<Shape>).map(([tag, attrs]) =>
+        Object.entries(attrs).reduce(
+          (shape, [key, value]) => shape.attr(key, value),
+          h.el(tag),
+        ),
+      ),
+    )
+}

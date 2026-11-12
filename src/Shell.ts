@@ -10,7 +10,6 @@ import { icon } from "./design/icons.ts"
 import { ListFavoritesRefresh } from "./favorites/loaders/ListFavorites.ts"
 import { Favorites } from "./favorites/services/Favorites.ts"
 import { FavoritesRepo } from "./favorites/services/FavoritesRepo.ts"
-import { cn } from "./lib/utils.ts"
 import { ProductPage } from "./pages/product/ProductPage.ts"
 import { SearchPage } from "./pages/SearchPage.ts"
 import { KnownProducts } from "./product/services/KnownProducts.ts"
@@ -211,21 +210,21 @@ export const ShellNoDeps = Component.make({
     // A page that fails stays failed until the app starts again, so the way
     // out is a full page load, which a link with a `target` is.
     const failed = () =>
-      h
-        .div(
-          h.h1("Something went wrong").class("text-lg font-bold"),
-          h
-            .p("This page hit a problem and couldn't be shown.")
-            .class("text-sm text-muted-foreground"),
-          h
-            .a("Reload")
-            .attr("href", AppRoute.print(route))
-            .attr("target", "_top")
-            .class(buttonClass({ class: "mt-3" })),
-        )
+      h.div
         .attr("role", "alert")
         .class(
           "mt-6 flex flex-col items-center gap-2 rounded-xl bg-card px-6 py-14 text-center",
+        )
+        .children(
+          h.h1.class("text-lg font-bold").children("Something went wrong"),
+          h.p
+            .class("text-sm text-muted-foreground")
+            .children("This page hit a problem and couldn't be shown."),
+          h.a
+            .attr("href", AppRoute.print(route))
+            .attr("target", "_top")
+            .class(buttonClass({ class: "mt-3" }))
+            .children("Reload"),
         )
 
     const page = AppRoute.match(route, {
@@ -243,144 +242,128 @@ export const ShellNoDeps = Component.make({
           fallback: failed,
         }),
       NotFound: () =>
-        h
-          .div(
-            h.h1("Page not found").class("text-lg font-bold"),
-            h
-              .p("That address doesn't lead anywhere.")
-              .class("text-sm text-muted-foreground"),
-            h
-              .a("Back to search")
-              .attr("href", "/")
-              .class(buttonClass({ class: "mt-3" })),
-          )
+        h.div
           .class(
             "mt-6 flex flex-col items-center gap-2 rounded-xl bg-card px-6 py-14 text-center",
           )
-          .key("not-found"),
+          .key("not-found")
+          .children(
+            h.h1.class("text-lg font-bold").children("Page not found"),
+            h.p
+              .class("text-sm text-muted-foreground")
+              .children("That address doesn't lead anywhere."),
+            h.a
+              .attr("href", "/")
+              .class(buttonClass({ class: "mt-3" }))
+              .children("Back to search"),
+          ),
     })
 
     // A drawer is a modal: nothing behind it can be reached while it is open
-    const frame = h
-      .div(
-        h
-          .header(
-            h
-              .div(
-                h
-                  .div(
-                    h
-                      .a(
-                        h
-                          .img()
-                          .attr("src", "/logo.svg")
-                          .attr("alt", "Bunnings Logo")
-                          .attr("width", "150")
-                          .attr("height", "50")
-                          .class(
-                            cn(
-                              "block w-auto transition-[height,opacity] hover:opacity-90 active:opacity-80",
-                              minimize
-                                ? "h-[30px] md:h-[34px]"
-                                : "h-[50px] md:h-[60px]",
-                            ),
-                          ),
-                      )
-                      .attr("href", "/")
-                      .class(
-                        "block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
-                      ),
-                  )
-                  .class(
-                    cn(
-                      "row-start-1",
-                      minimize
-                        ? "col-start-1 justify-self-start"
-                        : "col-start-2 justify-self-center pt-8 md:pt-12",
-                    ),
-                  ),
-                h
-                  .div(
-                    h
-                      .button(icon(h, "settings2", { class: "size-5" }))
-                      .ref(syncSettingsRef)
-                      .attr("type", "button")
-                      .attr("aria-label", "Sync settings")
-                      .class(
-                        "grid size-10 cursor-pointer place-items-center rounded-full text-white/90 transition-colors hover:bg-white/10 hover:text-white active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
-                      )
-                      .onClick(Message.make({ _tag: "SyncSettingsOpened" })),
-                  )
-                  .class("col-start-3 row-start-1 self-start justify-self-end"),
-                h
-                  .div(
-                    h
-                      .div(
-                        icon(h, loading ? "loaderCircle" : "search", {
-                          class: cn(
-                            "pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-primary",
-                            loading && "animate-spin",
-                          ),
-                        }),
-                        h
-                          .form(
-                            h
-                              .input()
-                              .ref(searchRef)
-                              .attr("type", "search")
-                              .attr("aria-label", "Search for products")
-                              .attr("placeholder", "Search for products...")
-                              .attr("autofocus", "")
-                              .class(
-                                inputClass(
-                                  cn(
-                                    "w-full pl-12 pr-4 border-2 border-card rounded-lg bg-card text-base md:text-base hover:border-card focus-visible:border-secondary focus-visible:ring-3 focus-visible:ring-secondary/20",
-                                    minimize
-                                      ? "h-11 md:h-12"
-                                      : "h-13 md:h-14 md:text-lg",
-                                  ),
-                                ),
-                              )
-                              .value(query)
-                              .onInput(({ value }) =>
-                                Message.make({
-                                  _tag: "SearchTyped",
-                                  text: value,
-                                }),
-                              ),
-                          )
-                          .attr("role", "search")
-                          .onSubmit(Message.make({ _tag: "SearchSubmitted" })),
-                      )
-                      .class(
-                        cn(
-                          "relative w-full mx-auto",
-                          minimize ? "max-w-2xl" : "max-w-xl",
-                        ),
-                      ),
-                  )
-                  .class(
-                    cn(
-                      "col-span-3 row-start-2",
-                      minimize && "md:col-span-1 md:col-start-2 md:row-start-1",
-                    ),
-                  ),
-              )
-              .class(
-                cn(
-                  "container mx-auto max-w-7xl grid grid-cols-[1fr_auto_1fr] items-center gap-x-6",
-                  minimize
-                    ? "py-3 gap-y-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:py-4"
-                    : "pt-4 pb-12 gap-y-10 md:pb-16 md:gap-y-12",
-                ),
-              ),
+    const frame = h.div.class("flex min-h-screen flex-col bg-brand").children(
+      h.header.class("px-3 sm:px-6 text-white").children(
+        h.div
+          .class(
+            "container mx-auto max-w-7xl grid grid-cols-[1fr_auto_1fr] items-center gap-x-6",
+            minimize
+              ? "py-3 gap-y-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:py-4"
+              : "pt-4 pb-12 gap-y-10 md:pb-16 md:gap-y-12",
           )
-          .class("px-3 sm:px-6 text-white"),
-        h
-          .main(h.div(page).class("container mx-auto max-w-7xl"))
-          .class("flex-1 bg-canvas px-3 sm:px-6 pb-24"),
-      )
-      .class("flex min-h-screen flex-col bg-brand")
+          .children(
+            h.div
+              .class(
+                "row-start-1",
+                minimize
+                  ? "col-start-1 justify-self-start"
+                  : "col-start-2 justify-self-center pt-8 md:pt-12",
+              )
+              .children(
+                h.a
+                  .attr("href", "/")
+                  .class(
+                    "block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+                  )
+                  .children(
+                    h.img
+                      .attr("src", "/logo.svg")
+                      .attr("alt", "Bunnings Logo")
+                      .attr("width", "150")
+                      .attr("height", "50")
+                      .class(
+                        "block w-auto transition-[height,opacity] hover:opacity-90 active:opacity-80",
+                        minimize
+                          ? "h-[30px] md:h-[34px]"
+                          : "h-[50px] md:h-[60px]",
+                      ),
+                  ),
+              ),
+            h.div
+              .class("col-start-3 row-start-1 self-start justify-self-end")
+              .children(
+                h.button
+                  .ref(syncSettingsRef)
+                  .attr("type", "button")
+                  .attr("aria-label", "Sync settings")
+                  .class(
+                    "grid size-10 cursor-pointer place-items-center rounded-full text-white/90 transition-colors hover:bg-white/10 hover:text-white active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+                  )
+                  .onClick(Message.make({ _tag: "SyncSettingsOpened" }))
+                  .children(icon(h, "settings2", { class: "size-5" })),
+              ),
+            h.div
+              .class(
+                "col-span-3 row-start-2",
+                minimize && "md:col-span-1 md:col-start-2 md:row-start-1",
+              )
+              .children(
+                h.div
+                  .class(
+                    "relative w-full mx-auto",
+                    minimize ? "max-w-2xl" : "max-w-xl",
+                  )
+                  .children(
+                    icon(h, loading ? "loaderCircle" : "search", {
+                      class: Html.classNames(
+                        "pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-primary",
+                        loading && "animate-spin",
+                      ),
+                    }),
+                    h.form
+                      .attr("role", "search")
+                      .onSubmit(Message.make({ _tag: "SearchSubmitted" }))
+                      .children(
+                        h.input
+                          .ref(searchRef)
+                          .attr("type", "search")
+                          .attr("aria-label", "Search for products")
+                          .attr("placeholder", "Search for products...")
+                          .attr("autofocus", "")
+                          .class(
+                            inputClass(
+                              Html.classNames(
+                                "w-full pl-12 pr-4 border-2 border-card rounded-lg bg-card text-base md:text-base hover:border-card focus-visible:border-secondary focus-visible:ring-3 focus-visible:ring-secondary/20",
+                                minimize
+                                  ? "h-11 md:h-12"
+                                  : "h-13 md:h-14 md:text-lg",
+                              ),
+                            ),
+                          )
+                          .value(query)
+                          .onInput(({ value }) =>
+                            Message.make({
+                              _tag: "SearchTyped",
+                              text: value,
+                            }),
+                          ),
+                      ),
+                  ),
+              ),
+          ),
+      ),
+      h.main
+        .class("flex-1 bg-canvas px-3 sm:px-6 pb-24")
+        .children(h.div.class("container mx-auto max-w-7xl").children(page)),
+    )
 
     return h.div(
       frame,

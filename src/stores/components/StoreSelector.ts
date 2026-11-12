@@ -7,7 +7,6 @@ import {
   type Store,
 } from "../../../server/src/domain/Bunnings.ts"
 import { icon } from "../../design/icons.ts"
-import { cn } from "../../lib/utils.ts"
 import { SessionTag } from "../../rpc/domain/SessionTag.ts"
 import { Session } from "../../rpc/services/Session.ts"
 import { CurrentStore } from "../loaders/CurrentStore.ts"
@@ -168,98 +167,90 @@ export const StoreSelectorNoDeps = Component.make({
             value.length === 0 ? "No stores found near you." : "",
         })
 
-    return h
-      .div(
-        h
-          .div(
-            icon(h, "mapPin", {
-              class:
-                "pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-accent",
-            }),
-            h
-              .select(
-                Option.match(shown, {
-                  onNone: () =>
-                    h
-                      .option("Select your store")
-                      .attr("value", "")
-                      .attr("hidden", "")
-                      .disabled(true)
-                      .selected(true)
-                      .key("none"),
-                  // A store chosen by search stays in the list when it isn't nearby
-                  onSome: (location) =>
-                    nearby.some((store) => store.name === location.code)
-                      ? undefined
-                      : h
-                          .option(location.city)
-                          .attr("value", location.code)
-                          .selected(true)
-                          .key(location.code),
-                }),
-                // What a list opened too early has to offer
-                model.nearbyWanted &&
-                  AsyncResult.isInitial(h.loaded.nearby) &&
-                  h.option("Loading…").disabled(true).key("loading"),
-                nearby.length > 0 &&
-                  h
-                    .optgroup(
-                      nearby.map((store) =>
-                        h
-                          .option(store.displayName)
-                          .attr("value", store.name)
-                          .selected(isShown(store.name))
-                          .key(store.name),
-                      ),
-                    )
-                    .attr("label", "Near you")
-                    .key("nearby"),
-              )
-              .attr("aria-label", "Your store")
-              .class(
-                cn(
-                  "h-11 w-full cursor-pointer appearance-none rounded-md border border-input bg-card py-2 pr-9 pl-10 text-sm font-medium text-foreground outline-none transition-[color,box-shadow] hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15",
-                  Option.isNone(shown) && "text-muted-foreground",
-                ),
-              )
-              .onFocus(Message.make({ _tag: "Reached" }))
-              .onChange(({ value }) => {
-                const store = nearby.find((store) => store.name === value)
-                return store === undefined
+    return h.div.class("w-full").children(
+      h.div.class("relative").children(
+        icon(h, "mapPin", {
+          class:
+            "pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-accent",
+        }),
+        h.select
+          .attr("aria-label", "Your store")
+          .class(
+            "h-11 w-full cursor-pointer appearance-none rounded-md border border-input bg-card py-2 pr-9 pl-10 text-sm font-medium outline-none transition-[color,box-shadow] hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15",
+            Option.isNone(shown) ? "text-muted-foreground" : "text-foreground",
+          )
+          .onFocus(Message.make({ _tag: "Reached" }))
+          .onChange(({ value }) => {
+            const store = nearby.find((store) => store.name === value)
+            return store === undefined
+              ? undefined
+              : Message.make({
+                  _tag: "StoreChosen",
+                  location: SessionLocation.fromStore(store),
+                })
+          })
+          .children(
+            Option.match(shown, {
+              onNone: () =>
+                h.option
+                  .attr("value", "")
+                  .attr("hidden", "")
+                  .disabled(true)
+                  .selected(true)
+                  .key("none")
+                  .children("Select your store"),
+              // A store chosen by search stays in the list when it isn't nearby
+              onSome: (location) =>
+                nearby.some((store) => store.name === location.code)
                   ? undefined
-                  : Message.make({
-                      _tag: "StoreChosen",
-                      location: SessionLocation.fromStore(store),
-                    })
-              }),
-            icon(h, "chevronDown", {
-              class:
-                "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 opacity-50",
+                  : h.option
+                      .attr("value", location.code)
+                      .selected(true)
+                      .key(location.code)
+                      .children(location.city),
             }),
+            // What a list opened too early has to offer
+            model.nearbyWanted &&
+              AsyncResult.isInitial(h.loaded.nearby) &&
+              h.option.disabled(true).key("loading").children("Loading…"),
+            nearby.length > 0 &&
+              h.optgroup
+                .attr("label", "Near you")
+                .key("nearby")
+                .children(
+                  nearby.map((store) =>
+                    h.option
+                      .attr("value", store.name)
+                      .selected(isShown(store.name))
+                      .key(store.name)
+                      .children(store.displayName),
+                  ),
+                ),
+          ),
+        icon(h, "chevronDown", {
+          class:
+            "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 opacity-50",
+        }),
+      ),
+      h.div.class("mt-2 flex items-center gap-3").children(
+        h.p
+          // Always here, so what it comes to say is announced
+          .attr("aria-live", "polite")
+          .class("text-sm text-muted-foreground")
+          .children(nearbyStatus),
+        h.button
+          .ref(searchButtonRef)
+          .attr("type", "button")
+          .class(
+            "ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-primary/15",
           )
-          .class("relative"),
-        h
-          .div(
-            h
-              .p(nearbyStatus)
-              // Always here, so what it comes to say is announced
-              .attr("aria-live", "polite")
-              .class("text-sm text-muted-foreground"),
-            h
-              .button(
-                icon(h, "search", { class: "size-4" }),
-                "Search all stores",
-              )
-              .ref(searchButtonRef)
-              .attr("type", "button")
-              .class(
-                "ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-primary/15",
-              )
-              .onClick(Message.make({ _tag: "SearchOpened" })),
-          )
-          .class("mt-2 flex items-center gap-3"),
-      )
-      .class("w-full")
+          .onClick(Message.make({ _tag: "SearchOpened" }))
+          .children(
+            icon(h, "search", { class: "size-4" }),
+            "Search all stores",
+          ),
+      ),
+    )
   },
 })
 

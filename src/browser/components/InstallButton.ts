@@ -55,11 +55,11 @@ export const InstallButtonNoDeps = Component.make({
   view: (model, h) =>
     h.div(
       model.available &&
-        h
-          .button(icon(h, "house"), "Add to home screen")
+        h.button
           .attr("type", "button")
           .class(buttonClass({ class: "cursor-pointer" }))
-          .onClick(Message.make({ _tag: "Pressed" })),
+          .onClick(Message.make({ _tag: "Pressed" }))
+          .children(icon(h, "house"), "Add to home screen"),
     ),
 })
 

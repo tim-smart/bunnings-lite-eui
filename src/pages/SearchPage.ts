@@ -124,89 +124,87 @@ export const SearchPageNoDeps = Component.make({
     const args = searchArgs(route)
 
     if (args === undefined) {
-      return h
-        .div(
-          h
-            .section(
-              h
-                .div(
-                  h
-                    .h2("Your store")
-                    .id("store-heading")
-                    .class("text-lg font-bold text-primary"),
-                  h
-                    .p(
-                      "Stock levels and aisle locations are shown for this store.",
-                    )
-                    .class("text-sm text-muted-foreground"),
-                )
-                .class("flex flex-col gap-1"),
-              h.child(StoreSelector, { key: "store" }),
-            )
+      return h.div
+        .class("flex flex-col pt-6 pb-10 gap-8 sm:pt-8 sm:gap-10")
+        .key("home")
+        .children(
+          h.section
             .attr("aria-labelledby", "store-heading")
             .class(
               "grid gap-4 rounded-xl bg-card p-4 sm:p-6 md:grid-cols-[1fr_minmax(0,24rem)] md:items-center md:gap-8",
+            )
+            .children(
+              h.div
+                .class("flex flex-col gap-1")
+                .children(
+                  h.h2
+                    .id("store-heading")
+                    .class("text-lg font-bold text-primary")
+                    .children("Your store"),
+                  h.p
+                    .class("text-sm text-muted-foreground")
+                    .children(
+                      "Stock levels and aisle locations are shown for this store.",
+                    ),
+                ),
+              h.child(StoreSelector, { key: "store" }),
             ),
           h.child(FavoritesList, { key: "favorites" }),
-          h
-            .div(
+          h.div
+            .class("fixed bottom-0 right-0 p-4 pb-safe flex flex-col")
+            .children(
               h.child(InstallButton, { key: "install" }),
-              h.div().class("h-4"),
-            )
-            .class("fixed bottom-0 right-0 p-4 pb-safe flex flex-col"),
+              h.div.class("h-4"),
+            ),
         )
-        .class("flex flex-col pt-6 pb-10 gap-8 sm:pt-8 sm:gap-10")
-        .key("home")
     }
 
     const skeletons = () =>
-      h
-        .div(
+      h.div
+        .class(gridClass)
+        .children(
           [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
-            h
-              .div(
+            h.div
+              .class("flex flex-col gap-3 rounded-xl bg-card p-3 sm:p-4")
+              .key(String(i))
+              .children(
                 skeleton(h, "h-28 w-full sm:h-44"),
                 skeleton(h, "h-4 w-full"),
                 skeleton(h, "h-4 w-2/3"),
                 skeleton(h, "h-6 w-1/3"),
-              )
-              .class("flex flex-col gap-3 rounded-xl bg-card p-3 sm:p-4")
-              .key(String(i)),
+              ),
           ),
         )
-        .class(gridClass)
 
     const noResults = () =>
-      h
-        .div(
-          icon(h, "searchX", { class: "size-8 text-primary/60" }),
-          h.h2("No results found.").class("text-lg font-bold"),
-          h
-            .p("Check the spelling or try a broader term.")
-            .class("text-sm text-muted-foreground"),
-          h
-            .button("Try another search")
-            .attr("type", "button")
-            .class(buttonClass({ class: "mt-3" }))
-            .onClick(Message.make({ _tag: "SearchWanted" })),
-        )
+      h.div
         .class(
           "flex flex-col items-center gap-2 rounded-xl bg-card px-6 py-14 text-center",
+        )
+        .children(
+          icon(h, "searchX", { class: "size-8 text-primary/60" }),
+          h.h2.class("text-lg font-bold").children("No results found."),
+          h.p
+            .class("text-sm text-muted-foreground")
+            .children("Check the spelling or try a broader term."),
+          h.button
+            .attr("type", "button")
+            .class(buttonClass({ class: "mt-3" }))
+            .onClick(Message.make({ _tag: "SearchWanted" }))
+            .children("Try another search"),
         )
 
     const grid = (items: ReadonlyArray<ProductBaseInfo>) =>
       items.length === 0
         ? noResults()
-        : h
-            .div(
-              items.map((product) =>
-                h.child(ProductCard, {
-                  key: product.id,
-                  props: { product, query: route.query.query },
-                }),
-              ),
-            )
-            .class(gridClass)
+        : h.div.class(gridClass).children(
+            items.map((product) =>
+              h.child(ProductCard, {
+                key: product.id,
+                props: { product, query: route.query.query },
+              }),
+            ),
+          )
 
     const results = AsyncResult.match(h.loaded.results, {
       // The last results stay up while the next ones load
@@ -216,56 +214,52 @@ export const SearchPageNoDeps = Component.make({
           onSome: ({ items }) => grid(items),
         }),
       onFailure: ({ cause }) =>
-        h
-          .div(
-            h
-              .h2("An error occurred while fetching results.")
-              .class("text-lg font-bold text-accent"),
-            h
-              .pre(Cause.pretty(cause))
-              .class(
-                "max-w-full overflow-x-auto whitespace-pre-wrap text-left text-xs text-muted-foreground",
-              ),
-          )
+        h.div
           .class(
             "flex flex-col items-center gap-3 rounded-xl bg-card px-6 py-12 text-center",
+          )
+          .children(
+            h.h2
+              .class("text-lg font-bold text-accent")
+              .children("An error occurred while fetching results."),
+            h.pre
+              .class(
+                "max-w-full overflow-x-auto whitespace-pre-wrap text-left text-xs text-muted-foreground",
+              )
+              .children(Cause.pretty(cause)),
           ),
       onSuccess: ({ value }) => grid(value.items),
     })
 
-    return h
-      .div(
-        h.div().class("h-4 sm:h-6"),
-        model.facets !== null &&
-          h.child(Filters, {
-            key: "filters",
-            props: { route, price: model.facets.price },
-          }),
-        h.div().class("h-3 sm:h-4"),
-        results,
-        h
-          .div(
-            model.scrolled &&
-              h
-                .button(
-                  icon(h, "arrowUp", { class: "size-5", strokeWidth: 2.5 }),
-                )
-                .attr("type", "button")
-                .attr("aria-label", "Back to top")
-                .class(
-                  buttonClass({
-                    class:
-                      "size-12 cursor-pointer rounded-full shadow-lg shadow-primary/25 animate-in fade-in zoom-in-90",
-                  }),
-                )
-                .onClick(Message.make({ _tag: "SearchWanted" })),
-            h.div().class("h-6"),
-          )
-          .class(
-            "fixed bottom-0 right-0 p-6 pb-safe flex flex-col transform-gpu",
-          ),
-      )
-      .key("results")
+    return h.div.key("results").children(
+      h.div.class("h-4 sm:h-6"),
+      model.facets !== null &&
+        h.child(Filters, {
+          key: "filters",
+          props: { route, price: model.facets.price },
+        }),
+      h.div.class("h-3 sm:h-4"),
+      results,
+      h.div
+        .class("fixed bottom-0 right-0 p-6 pb-safe flex flex-col transform-gpu")
+        .children(
+          model.scrolled &&
+            h.button
+              .attr("type", "button")
+              .attr("aria-label", "Back to top")
+              .class(
+                buttonClass({
+                  class:
+                    "size-12 cursor-pointer rounded-full shadow-lg shadow-primary/25 animate-in fade-in zoom-in-90",
+                }),
+              )
+              .onClick(Message.make({ _tag: "SearchWanted" }))
+              .children(
+                icon(h, "arrowUp", { class: "size-5", strokeWidth: 2.5 }),
+              ),
+          h.div.class("h-6"),
+        ),
+    )
   },
 })
 

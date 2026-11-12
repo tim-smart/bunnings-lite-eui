@@ -1,5 +1,4 @@
 import type { View } from "effect/ui"
-import { cn } from "../lib/utils.ts"
 import type { H } from "./h.ts"
 
 /**
@@ -24,30 +23,7 @@ export const drawer = <Msg, const C extends ReadonlyArray<View.Input<Msg>>>(
   },
   ...children: C
 ) =>
-  h
-    .dialog(
-      // The dialog fills the screen so that its own backdrop can be pressed.
-      // `::backdrop` takes no handler, and `closedby` isn't in every browser.
-      h
-        .div()
-        .class("absolute inset-0 bg-black/50 animate-in fade-in-0")
-        .attr("aria-hidden", "true")
-        .onClick(options.onClose),
-      h
-        .div(
-          h
-            .div()
-            .class("bg-muted mx-auto mt-4 h-2 w-[100px] shrink-0 rounded-full")
-            .attr("aria-hidden", "true"),
-          ...children,
-        )
-        .class(
-          cn(
-            "absolute inset-x-0 bottom-0 mx-auto flex max-h-[80vh] w-full max-w-md flex-col rounded-t-lg border-t bg-background animate-in slide-in-from-bottom duration-300",
-            options.class,
-          ),
-        ),
-    )
+  h.dialog
     .modal(true)
     .onCancel(options.onClose)
     .attr("aria-labelledby", options.titleId)
@@ -60,6 +36,25 @@ export const drawer = <Msg, const C extends ReadonlyArray<View.Input<Msg>>>(
     .class(
       "fixed inset-0 m-0 size-full max-h-none max-w-none overflow-hidden border-0 bg-transparent p-0 text-foreground backdrop:bg-transparent",
     )
+    .children(
+      // The dialog fills the screen so that its own backdrop can be pressed.
+      // `::backdrop` takes no handler, and `closedby` isn't in every browser.
+      h.div
+        .class("absolute inset-0 bg-black/50 animate-in fade-in-0")
+        .attr("aria-hidden", "true")
+        .onClick(options.onClose),
+      h.div
+        .class(
+          "absolute inset-x-0 bottom-0 mx-auto flex max-h-[80vh] w-full max-w-md flex-col rounded-t-lg border-t bg-background animate-in slide-in-from-bottom duration-300",
+          options.class,
+        )
+        .children(
+          h.div
+            .class("bg-muted mx-auto mt-4 h-2 w-[100px] shrink-0 rounded-full")
+            .attr("aria-hidden", "true"),
+          ...children,
+        ),
+    )
 
 export const drawerHeader = <
   Msg,
@@ -69,18 +64,18 @@ export const drawerHeader = <
   options: { readonly titleId: string; readonly title: string },
   ...description: C
 ) =>
-  h
-    .div(
-      h
-        .h2(options.title)
-        .id(options.titleId)
-        .class("text-foreground font-semibold"),
-      h
-        .p(...description)
-        .id(`${options.titleId}-description`)
-        .class("text-muted-foreground text-sm"),
-    )
+  h.div
     .class("flex flex-col gap-0.5 p-4 text-center md:gap-1.5 md:text-left")
+    .children(
+      h.h2
+        .id(options.titleId)
+        .class("text-foreground font-semibold")
+        .children(options.title),
+      h.p
+        .id(`${options.titleId}-description`)
+        .class("text-muted-foreground text-sm")
+        .children(...description),
+    )
 
 export const drawerFooter = <
   Msg,
@@ -88,4 +83,4 @@ export const drawerFooter = <
 >(
   h: H<Msg>,
   ...children: C
-) => h.div(...children).class("mt-auto flex flex-col gap-2 p-4")
+) => h.div.class("mt-auto flex flex-col gap-2 p-4").children(...children)

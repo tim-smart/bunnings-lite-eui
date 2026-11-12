@@ -44,35 +44,35 @@ export const FulfillmentBadgeNoDeps = Component.make({
       onNone: () => undefined,
       onSome: (info) => {
         if (!info.isAvailable) {
-          return h
-            .span("Out of stock")
+          return h.span
             .class(
               badgeClass(
                 "h-7 rounded-full border-0 bg-orange-100 px-2.5 text-orange-800 dark:bg-orange-400/15 dark:text-orange-300",
               ),
             )
+            .children("Out of stock")
         }
         if (Option.isSome(info.location)) {
           const { aisle, bay } = info.location.value
-          return h
-            .span(icon(h, "mapPin"), `Aisle ${aisle}/${bay}`)
+          return h.span
             .class(
               badgeClass(
                 "h-7 rounded-full border-0 bg-primary/10 px-2.5 text-primary tabular-nums",
               ),
             )
+            .children(icon(h, "mapPin"), `Aisle ${aisle}/${bay}`)
         }
         if (!h.props.showAvailable) return undefined
-        return h
-          .span("Available")
+        return h.span
           .class(
             badgeClass(
               "h-7 rounded-full border-0 bg-green-100 px-2.5 text-green-800 dark:bg-green-400/15 dark:text-green-300",
             ),
           )
+          .children("Available")
       },
     })
-    return h.div(badge).class(h.props.class)
+    return h.div.class(h.props.class).children(badge)
   },
 })
 
