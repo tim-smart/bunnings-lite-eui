@@ -152,86 +152,78 @@ export const SyncSettingsPanelNoDeps = Component.make({
       ),
       AsyncResult.match(h.loaded.settings, {
         onInitial: () =>
-          h
-            .div(skeleton(h, "h-10 w-full"), skeleton(h, "h-10 w-full"))
-            .class("px-4 pb-2 flex flex-col gap-4"),
+          h.div
+            .class("px-4 pb-2 flex flex-col gap-4")
+            .children(skeleton(h, "h-10 w-full"), skeleton(h, "h-10 w-full")),
         onFailure: () => h.div(),
         onSuccess: ({ value: settings }) =>
-          h
-            .div(
-              h
-                .label(
-                  "Remote URL",
-                  h
-                    .input()
-                    .id("remote-url")
-                    .attr("placeholder", "https://")
-                    .class(inputClass())
-                    .value(model.remoteUrl ?? settings.remoteUrl ?? "")
-                    .onInput(({ value }) =>
-                      Message.make({ _tag: "RemoteUrlTyped", text: value }),
-                    ),
-                )
-                .class(labelClass),
-              h
-                .label(
-                  "Identity",
-                  // Switching identity discards local data, so it goes
-                  // through the invite prompt instead
-                  h
-                    .input()
-                    .id("identity")
-                    .attr("readonly", "")
-                    .class(inputClass())
-                    .value(settings.identity),
-                )
-                .class(labelClass),
-              h
-                .div(
-                  h
-                    .p(
-                      icon(h, "triangleAlert", {
-                        class: "size-4 shrink-0 mt-0.5",
-                      }),
-                      h.span(
-                        "An invite link gives full access to your synced favorites. Whoever has it can read, change and clear them, from any device, and it can't be revoked later. Only send it to people you trust.",
-                      ),
-                    )
-                    .class("flex gap-2 text-amber-900 dark:text-amber-200"),
-                  h
-                    .button(
-                      icon(h, model.copied ? "check" : "copy"),
-                      "Copy invite link",
-                    )
-                    .attr("type", "button")
-                    .disabled(settings.remoteUrl === null)
-                    .class(buttonClass({ variant: "outline" }))
-                    .onClick(Message.make({ _tag: "CopyPressed" })),
-                  settings.remoteUrl === null &&
-                    h
-                      .p("Set a remote URL to create an invite.")
-                      .class("text-muted-foreground"),
-                  model.copied &&
-                    h
-                      .p("Copied. Send it privately.")
-                      .attr("role", "status")
-                      .class("text-muted-foreground"),
-                )
-                .class(
-                  "flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-400/30 dark:bg-amber-400/10",
+          h.div.class("px-4 pb-2 flex flex-col gap-4").children(
+            h.label.class(labelClass).children(
+              "Remote URL",
+              h.input
+                .id("remote-url")
+                .attr("placeholder", "https://")
+                .class(inputClass())
+                .value(model.remoteUrl ?? settings.remoteUrl ?? "")
+                .onInput(({ value }) =>
+                  Message.make({ _tag: "RemoteUrlTyped", text: value }),
                 ),
-            )
-            .class("px-4 pb-2 flex flex-col gap-4"),
+            ),
+            h.label.class(labelClass).children(
+              "Identity",
+              // Switching identity discards local data, so it goes
+              // through the invite prompt instead
+              h.input
+                .id("identity")
+                .attr("readonly", "")
+                .class(inputClass())
+                .value(settings.identity),
+            ),
+            h.div
+              .class(
+                "flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-400/30 dark:bg-amber-400/10",
+              )
+              .children(
+                h.p
+                  .class("flex gap-2 text-amber-900 dark:text-amber-200")
+                  .children(
+                    icon(h, "triangleAlert", {
+                      class: "size-4 shrink-0 mt-0.5",
+                    }),
+                    h.span(
+                      "An invite link gives full access to your synced favorites. Whoever has it can read, change and clear them, from any device, and it can't be revoked later. Only send it to people you trust.",
+                    ),
+                  ),
+                h.button
+                  .attr("type", "button")
+                  .disabled(settings.remoteUrl === null)
+                  .class(buttonClass({ variant: "outline" }))
+                  .onClick(Message.make({ _tag: "CopyPressed" }))
+                  .children(
+                    icon(h, model.copied ? "check" : "copy"),
+                    "Copy invite link",
+                  ),
+                settings.remoteUrl === null &&
+                  h.p
+                    .class("text-muted-foreground")
+                    .children("Set a remote URL to create an invite."),
+                model.copied &&
+                  h.p
+                    .attr("role", "status")
+                    .class("text-muted-foreground")
+                    .children("Copied. Send it privately."),
+              ),
+          ),
       }),
       drawerFooter(
         h,
-        h
-          .button("Close")
+        h.button
           // The fields above load after the sheet opens
           .attr("autofocus", "")
           .attr("type", "button")
           .class(buttonClass({ variant: "outline" }))
-          .onClick(Message.make({ _tag: "Closed" })),
+          .onClick(Message.make({ _tag: "Closed" }))
+          .children("Close"),
       ),
     )
   },

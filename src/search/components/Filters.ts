@@ -165,25 +165,22 @@ export const Filters = Component.make({
     const { priceMax, priceMin, ratingMax, ratingMin } = route.query
 
     const heading = (name: string, filter: "price" | "rating", set: boolean) =>
-      h
-        .div(
-          h.div(name).class(labelClass("text-foreground font-semibold")),
-          set &&
-            h
-              .button("(clear)")
-              .attr("type", "button")
-              .class(
-                "cursor-pointer rounded-sm text-sm text-muted-foreground underline-offset-4 hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-              )
-              .onClick(Message.make({ _tag: "Cleared", filter })),
-        )
-        .class("flex min-h-5 items-center justify-between gap-2")
+      h.div.class("flex min-h-5 items-center justify-between gap-2").children(
+        h.div.class(labelClass("text-foreground font-semibold")).children(name),
+        set &&
+          h.button
+            .attr("type", "button")
+            .class(
+              "cursor-pointer rounded-sm text-sm text-muted-foreground underline-offset-4 hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            )
+            .onClick(Message.make({ _tag: "Cleared", filter }))
+            .children("(clear)"),
+      )
 
     const priceInput = (end: "min" | "max", range: FacetRange) => {
       const edit = end === "min" ? edits.priceMin : edits.priceMax
       const applied = end === "min" ? priceMin : priceMax
-      return h
-        .input()
+      return h.input
         .ref(end === "min" ? minRef : maxRef)
         .attr("type", "number")
         .attr("inputmode", "decimal")
@@ -203,37 +200,40 @@ export const Filters = Component.make({
     }
 
     const priceFilter = (range: FacetRange) =>
-      h
-        .div(
+      h.div
+        .class("flex flex-col gap-1.5")
+        .key("price")
+        .children(
           heading(
             "Price",
             "price",
             priceMin !== undefined && priceMax !== undefined,
           ),
-          h
-            .div(
-              h
-                .form(
-                  h
-                    .div(
+          h.div
+            .class("flex-1 flex items-center min-h-10 px-1 sm:px-0")
+            .children(
+              h.form
+                .class("w-full")
+                .onSubmit(Message.make({ _tag: "PriceSubmitted" }))
+                .children(
+                  h.div
+                    .class("flex gap-3 items-center")
+                    .children(
                       priceInput("min", range),
-                      h
-                        .span("to")
-                        .class("shrink-0 text-sm text-muted-foreground"),
+                      h.span
+                        .class("shrink-0 text-sm text-muted-foreground")
+                        .children("to"),
                       priceInput("max", range),
-                    )
-                    .class("flex gap-3 items-center"),
+                    ),
                   // Enter submits a form with two fields only when it has a
                   // submit button
-                  h.button("Submit").attr("type", "submit").class("hidden"),
-                )
-                .class("w-full")
-                .onSubmit(Message.make({ _tag: "PriceSubmitted" })),
-            )
-            .class("flex-1 flex items-center min-h-10 px-1 sm:px-0"),
+                  h.button
+                    .attr("type", "submit")
+                    .class("hidden")
+                    .children("Submit"),
+                ),
+            ),
         )
-        .class("flex flex-col gap-1.5")
-        .key("price")
 
     const low = edits.ratingMin ?? ratingMin ?? ratingFacet.start
     const high = edits.ratingMax ?? ratingMax ?? ratingFacet.end
@@ -254,8 +254,7 @@ export const Filters = Component.make({
     }
 
     const ratingThumb = (end: "min" | "max", value: number) => [
-      h
-        .input()
+      h.input
         .attr("type", "range")
         .attr("min", String(ratingFacet.start))
         .attr("max", String(ratingFacet.end))
@@ -270,54 +269,48 @@ export const Filters = Component.make({
         )
         .onChange(Message.make({ _tag: "RatingReleased" }))
         .key(end),
-      h
-        .output(String(value))
+      h.output
         .attr("style", `left: ${at(value)}`)
-        .key(`${end}-value`),
+        .key(`${end}-value`)
+        .children(String(value)),
     ]
 
-    const ratingFilter = h
-      .div(
+    const ratingFilter = h.div
+      .class("flex flex-col gap-1.5")
+      .key("rating")
+      .children(
         heading(
           "Rating",
           "rating",
           ratingMin !== undefined && ratingMax !== undefined,
         ),
-        h
-          .div(
-            h
-              .div(
-                h
-                  .div(
-                    h
-                      .div()
-                      .class("bg-secondary absolute h-full")
-                      .attr(
-                        "style",
-                        `left: ${at(low)}; right: ${fromEnd(high)}`,
-                      ),
-                  )
-                  .class(
-                    "bg-primary/15 relative h-1.5 w-full grow overflow-hidden rounded-full",
-                  ),
-                ratingThumb("min", low),
-                ratingThumb("max", high),
-              )
-              .attr("role", "group")
-              .attr("aria-label", "Rating")
-              .class(
-                "dual-range relative flex h-6 w-full touch-none items-center select-none",
-              ),
-          )
-          .class("flex-1 flex items-center min-h-10 px-1 sm:px-0"),
+        h.div.class("flex-1 flex items-center min-h-10 px-1 sm:px-0").children(
+          h.div
+            .attr("role", "group")
+            .attr("aria-label", "Rating")
+            .class(
+              "dual-range relative flex h-6 w-full touch-none items-center select-none",
+            )
+            .children(
+              h.div
+                .class(
+                  "bg-primary/15 relative h-1.5 w-full grow overflow-hidden rounded-full",
+                )
+                .children(
+                  h.div
+                    .class("bg-secondary absolute h-full")
+                    .attr("style", `left: ${at(low)}; right: ${fromEnd(high)}`),
+                ),
+              ratingThumb("min", low),
+              ratingThumb("max", high),
+            ),
+        ),
       )
-      .class("flex flex-col gap-1.5")
-      .key("rating")
 
-    return h
-      .div(price !== null && priceFilter(price), ratingFilter)
+    return h.div
       .class(
         "grid grid-cols-1 gap-x-8 gap-y-3 rounded-xl bg-card px-4 py-3 sm:grid-cols-2 sm:gap-y-4 sm:px-6 sm:py-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,22rem)]",
       )
+      .children(price !== null && priceFilter(price), ratingFilter)
   },
 })

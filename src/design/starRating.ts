@@ -13,11 +13,14 @@ export const starRating = <Msg>(
     icon(h, "star", {
       class: cn(size, "transition-colors fill-none text-foreground/25"),
     })
-  return h
-    .div(
+  return h.div
+    .class("flex items-center")
+    .attr("aria-label", `Rating: ${rating} out of 5 stars`)
+    .children(
       [0, 1, 2, 3, 4].map((index) => {
         const half = rating % 1 !== 0 && index + 1 === Math.ceil(rating)
         const star = icon(h, half ? "starHalf" : "star", {
+          key: half ? undefined : String(index),
           class: cn(
             half ? "absolute top-0 left-0" : "relative",
             size,
@@ -28,10 +31,11 @@ export const starRating = <Msg>(
           ),
         })
         return half
-          ? h.div(star, empty()).class("relative", size).key(String(index))
-          : star.key(String(index))
+          ? h.div
+              .class("relative", size)
+              .key(String(index))
+              .children(star, empty())
+          : star
       }),
     )
-    .class("flex items-center")
-    .attr("aria-label", `Rating: ${rating} out of 5 stars`)
 }

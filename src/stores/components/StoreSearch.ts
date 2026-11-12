@@ -115,123 +115,116 @@ export const StoreSearchNoDeps = Component.make({
         { titleId: "store-search-title", title: "Find your store" },
         "Search Bunnings stores in New Zealand and Australia.",
       ),
-      h
-        .div(
-          h
-            .div(
-              icon(h, "search", {
-                class:
-                  "absolute left-7 top-1/2 -translate-y-1/2 -mt-1 size-4 text-muted-foreground",
-              }),
-              h
-                .input()
-                .attr("autofocus", "")
-                .attr("type", "search")
-                .attr("aria-label", "Search stores")
-                .attr("placeholder", "Store, suburb or postcode")
-                .class(inputClass("pl-9"))
-                .value(model.search)
-                .onInput(({ value }) =>
-                  Message.make({ _tag: "SearchTyped", text: value }),
+      h.div.class("flex flex-col min-h-0 flex-1").children(
+        h.div.class("px-4 pb-2 relative").children(
+          icon(h, "search", {
+            class:
+              "absolute left-7 top-1/2 -translate-y-1/2 -mt-1 size-4 text-muted-foreground",
+          }),
+          h.input
+            .attr("autofocus", "")
+            .attr("type", "search")
+            .attr("aria-label", "Search stores")
+            .attr("placeholder", "Store, suburb or postcode")
+            .class(inputClass("pl-9"))
+            .value(model.search)
+            .onInput(({ value }) =>
+              Message.make({ _tag: "SearchTyped", text: value }),
+            ),
+        ),
+        h.div.class("overflow-y-auto flex-1 px-4 pb-safe").children(
+          AsyncResult.match(h.loaded.all, {
+            onInitial: () =>
+              [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
+                skeleton(h, "h-12 my-2").key(`skeleton-${i}`),
+              ),
+            onFailure: () =>
+              h.div
+                .class(
+                  "flex flex-col items-center gap-3 py-8 text-sm text-muted-foreground",
+                )
+                .children(
+                  h.p.attr("role", "status").children("Couldn't load stores."),
+                  h.button
+                    .attr("type", "button")
+                    .class(buttonClass({ variant: "outline" }))
+                    .onClick(Message.make({ _tag: "Retried" }))
+                    .children("Try again"),
                 ),
-            )
-            .class("px-4 pb-2 relative"),
-          h
-            .div(
-              AsyncResult.match(h.loaded.all, {
-                onInitial: () =>
-                  [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
-                    skeleton(h, "h-12 my-2").key(`skeleton-${i}`),
-                  ),
-                onFailure: () =>
-                  h
-                    .div(
-                      h.p("Couldn't load stores.").attr("role", "status"),
-                      h
-                        .button("Try again")
-                        .attr("type", "button")
-                        .class(buttonClass({ variant: "outline" }))
-                        .onClick(Message.make({ _tag: "Retried" })),
-                    )
-                    .class(
-                      "flex flex-col items-center gap-3 py-8 text-sm text-muted-foreground",
-                    ),
-                onSuccess: ({ value: stores }) => {
-                  const found = stores.filter((store) => matches(store, terms))
-                  if (found.length === 0) {
-                    return h
-                      .p(`No stores match “${model.search.trim()}”.`)
-                      .attr("role", "status")
-                      .class("py-8 text-center text-sm text-muted-foreground")
-                  }
-                  const countries = new Map<string, Array<Store>>()
-                  for (const store of found) {
-                    const country = store.address.country.name
-                    countries.set(country, [
-                      ...(countries.get(country) ?? []),
-                      store,
-                    ])
-                  }
-                  for (const stores of countries.values()) {
-                    stores.sort((a, b) =>
-                      a.displayName.localeCompare(b.displayName),
-                    )
-                  }
-                  const item = (store: Store) => {
-                    const button = h
-                      .button(
-                        icon(h, "mapPin", {
-                          class: "size-4 shrink-0 text-accent",
-                        }),
-                        h
-                          .span(
-                            h
-                              .span(store.displayName)
-                              .class("font-medium text-primary"),
-                            h
-                              .span(store.address.formattedAddress)
-                              .class("truncate text-xs text-muted-foreground"),
-                          )
-                          .class("flex min-w-0 flex-1 flex-col"),
-                        isShown(store.name) &&
-                          icon(h, "check", { class: "size-4 text-primary" }),
-                      )
-                      .attr("type", "button")
-                      .attr(
-                        "aria-current",
-                        isShown(store.name) ? "true" : undefined,
-                      )
-                      .class(
-                        "flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
-                      )
-                      .onClick(
-                        Message.make({
-                          _tag: "StoreChosen",
-                          location: SessionLocation.fromStore(store),
-                        }),
-                      )
-                    return h.li(button).key(store.name)
-                  }
-                  return Array.from(countries, ([country, stores]) =>
-                    h
-                      .section(
-                        h
-                          .h3(country)
-                          .class(
-                            "sticky top-0 bg-background py-2 text-sm font-semibold text-primary",
-                          ),
-                        h.ul(stores.map(item)).class("flex flex-col"),
-                      )
-                      .attr("aria-label", country)
-                      .class("pb-4")
-                      .key(country),
+            onSuccess: ({ value: stores }) => {
+              const found = stores.filter((store) => matches(store, terms))
+              if (found.length === 0) {
+                return h.p
+                  .attr("role", "status")
+                  .class("py-8 text-center text-sm text-muted-foreground")
+                  .children(`No stores match “${model.search.trim()}”.`)
+              }
+              const countries = new Map<string, Array<Store>>()
+              for (const store of found) {
+                const country = store.address.country.name
+                countries.set(country, [
+                  ...(countries.get(country) ?? []),
+                  store,
+                ])
+              }
+              for (const stores of countries.values()) {
+                stores.sort((a, b) =>
+                  a.displayName.localeCompare(b.displayName),
+                )
+              }
+              const item = (store: Store) => {
+                const button = h.button
+                  .attr("type", "button")
+                  .attr(
+                    "aria-current",
+                    isShown(store.name) ? "true" : undefined,
                   )
-                },
-              }),
-            )
-            .class("overflow-y-auto flex-1 px-4 pb-safe"),
-        )
-        .class("flex flex-col min-h-0 flex-1"),
+                  .class(
+                    "flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
+                  )
+                  .onClick(
+                    Message.make({
+                      _tag: "StoreChosen",
+                      location: SessionLocation.fromStore(store),
+                    }),
+                  )
+                  .children(
+                    icon(h, "mapPin", {
+                      class: "size-4 shrink-0 text-accent",
+                    }),
+                    h.span
+                      .class("flex min-w-0 flex-1 flex-col")
+                      .children(
+                        h.span
+                          .class("font-medium text-primary")
+                          .children(store.displayName),
+                        h.span
+                          .class("truncate text-xs text-muted-foreground")
+                          .children(store.address.formattedAddress),
+                      ),
+                    isShown(store.name) &&
+                      icon(h, "check", { class: "size-4 text-primary" }),
+                  )
+                return h.li.key(store.name).children(button)
+              }
+              return Array.from(countries, ([country, stores]) =>
+                h.section
+                  .attr("aria-label", country)
+                  .class("pb-4")
+                  .key(country)
+                  .children(
+                    h.h3
+                      .class(
+                        "sticky top-0 bg-background py-2 text-sm font-semibold text-primary",
+                      )
+                      .children(country),
+                    h.ul.class("flex flex-col").children(stores.map(item)),
+                  ),
+              )
+            },
+          }),
+        ),
+      ),
     )
   },
 })

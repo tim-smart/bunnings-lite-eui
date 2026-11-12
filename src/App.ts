@@ -86,29 +86,33 @@ export const AppNoDeps = Component.make({
       case "Checking":
         return h.div()
       case "Blocked":
-        return h
-          .main(
-            h.h1("Waiting to finish joining").class("text-xl font-semibold"),
+        return h.main
+          .class("mx-auto max-w-md space-y-4 p-6 text-white")
+          .attr("role", "status")
+          .children(
+            h.h1
+              .class("text-xl font-semibold")
+              .children("Waiting to finish joining"),
             h.p("Close other Bunnings Lite tabs or windows to finish joining."),
             h.p("This page will continue automatically once they are closed."),
           )
-          .class("mx-auto max-w-md space-y-4 p-6 text-white")
-          .attr("role", "status")
       case "Failed":
         // The journal stays closed until every setting is saved, and the
         // recorded join is removed last, so a reload retries all of it.
-        return h
-          .main(
-            h.h1("Could not finish joining").class("text-xl font-semibold"),
-            h.p("Check that browser storage is available, then try again."),
-            h
-              .button("Retry")
-              .attr("type", "button")
-              .class(buttonClass())
-              .onClick(AppMessage.make({ _tag: "Retry" })),
-          )
+        return h.main
           .class("mx-auto max-w-md space-y-4 p-6 text-white")
           .attr("role", "alert")
+          .children(
+            h.h1
+              .class("text-xl font-semibold")
+              .children("Could not finish joining"),
+            h.p("Check that browser storage is available, then try again."),
+            h.button
+              .attr("type", "button")
+              .class(buttonClass())
+              .onClick(AppMessage.make({ _tag: "Retry" }))
+              .children("Retry"),
+          )
     }
   },
 })

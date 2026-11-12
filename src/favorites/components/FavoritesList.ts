@@ -59,60 +59,61 @@ export const FavoritesListNoDeps = Component.make({
   view: (_model, h) => {
     const favorites = AsyncResult.getOrElse(h.loaded.favorites, () => [])
     if (favorites.length === 0) {
-      return h
-        .section(
-          icon(h, "star", { class: "size-7 text-accent" }),
-          h.h2("No favourites yet").id("favourites-heading").class("font-bold"),
-          h
-            .p(
-              "Tap the star on any product to keep it here for your next trip.",
-            )
-            .class("max-w-xs text-sm text-muted-foreground"),
-        )
+      return h.section
         .attr("aria-labelledby", "favourites-heading")
         .class(
           "flex flex-col items-center gap-2 rounded-xl bg-card/60 px-6 py-10 text-center",
         )
+        .children(
+          icon(h, "star", { class: "size-7 text-accent" }),
+          h.h2
+            .id("favourites-heading")
+            .class("font-bold")
+            .children("No favourites yet"),
+          h.p
+            .class("max-w-xs text-sm text-muted-foreground")
+            .children(
+              "Tap the star on any product to keep it here for your next trip.",
+            ),
+        )
     }
-    return h
-      .section(
-        h
-          .div(
-            h
-              .h2(
-                "Favourites ",
-                h
-                  .span(String(favorites.length))
-                  .class(
-                    "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-xs font-semibold tabular-nums",
-                  ),
-              )
-              .id("favourites-heading")
-              .class("flex items-center gap-2 text-lg font-bold text-primary"),
-            h
-              .button("Clear all")
-              .attr("type", "button")
-              .class(
-                "cursor-pointer rounded-sm text-sm font-medium text-muted-foreground underline-offset-4 hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-              )
-              .onClick(Message.make({ _tag: "Cleared" })),
+    return h.section
+      .attr("aria-labelledby", "favourites-heading")
+      .class("w-full flex flex-col gap-4")
+      .children(
+        h.div.class("flex items-center justify-between gap-4").children(
+          h.h2
+            .id("favourites-heading")
+            .class("flex items-center gap-2 text-lg font-bold text-primary")
+            .children(
+              "Favourites ",
+              h.span
+                .class(
+                  "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-xs font-semibold tabular-nums",
+                )
+                .children(String(favorites.length)),
+            ),
+          h.button
+            .attr("type", "button")
+            .class(
+              "cursor-pointer rounded-sm text-sm font-medium text-muted-foreground underline-offset-4 hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            )
+            .onClick(Message.make({ _tag: "Cleared" }))
+            .children("Clear all"),
+        ),
+        h.div
+          .class(
+            "grid gap-2 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
           )
-          .class("flex items-center justify-between gap-4"),
-        h
-          .div(
+          .children(
             favorites.map((product) =>
               h.child(ProductCard, {
                 key: product.id,
                 props: { product, query: "" },
               }),
             ),
-          )
-          .class(
-            "grid gap-2 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
           ),
       )
-      .attr("aria-labelledby", "favourites-heading")
-      .class("w-full flex flex-col gap-4")
   },
 })
 
