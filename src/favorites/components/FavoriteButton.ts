@@ -1,5 +1,5 @@
 import { Effect, Layer, Schema } from "effect"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Command, Component } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { ProductBaseInfo } from "../../../server/src/domain/Bunnings.ts"
@@ -9,12 +9,9 @@ import { KnownProducts } from "../../product/services/KnownProducts.ts"
 import { ListFavorites } from "../loaders/ListFavorites.ts"
 import { Favorites } from "../services/Favorites.ts"
 
-const FavoritesSnapshot = Loader.Snapshot(ListFavorites, "favorites")
-
 export const FavoriteButtonMessage = Schema.TaggedUnion({
   Toggled: {},
   Saved: {},
-  FavoritesChanged: { snapshot: FavoritesSnapshot },
 })
 
 /** Adds a product to the favourites, or removes it if it is one already. */
@@ -41,12 +38,12 @@ export const FavoriteButtonNoDeps = Component.make({
     product: ProductBaseInfo,
     variant: Schema.Literals(["icon", "button"]),
   }),
-  model: Schema.Struct({ favorites: FavoritesSnapshot }),
+  model: Schema.Struct({}),
   message: FavoriteButtonMessage,
   loaders: {
-    favorites: () => ({}),
+    favorites: { load: ListFavorites, args: () => ({}) },
   },
-  init: ($) => $.empty,
+  init: () => ({}),
   update: (model, message, $) =>
     FavoriteButtonMessage.match(message, {
       Toggled: () =>
@@ -56,14 +53,7 @@ export const FavoriteButtonNoDeps = Component.make({
           ),
         ),
       Saved: () => model,
-      FavoritesChanged: ({ snapshot }) => ({ favorites: snapshot }),
     }),
-  subscriptions: (_model, _props, $) => [
-    $.watch({
-      favorites: (snapshot) =>
-        FavoriteButtonMessage.make({ _tag: "FavoritesChanged", snapshot }),
-    }),
-  ],
   view: (_model, h) => {
     const { product, variant } = h.props
     const isFavorite = AsyncResult.getOrElse(h.loaded.favorites, () => []).some(

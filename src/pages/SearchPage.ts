@@ -1,5 +1,5 @@
 import { Cause, Layer, Option, Schema } from "effect"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Component } from "effect/ui"
 import type { ProductBaseInfo } from "../../server/src/domain/Bunnings.ts"
 import { InstallButton } from "../browser/components/InstallButton.ts"
@@ -22,8 +22,6 @@ import {
 import { SearchProducts } from "../search/loaders/SearchProducts.ts"
 import { StoreSelector } from "../stores/components/StoreSelector.ts"
 
-const ResultsSnapshot = Loader.SnapshotList(SearchProducts, "results")
-
 // What the first page of a search says about its filters
 const Facets = Schema.Struct({
   query: Schema.String,
@@ -31,12 +29,7 @@ const Facets = Schema.Struct({
 })
 
 export const SearchPageMessage = Schema.TaggedUnion({
-  ResultsChanged: {
-    snapshot: ResultsSnapshot,
-    facets: Schema.NullOr(Facets),
-    /** Whether there is a next page that nothing is loading yet. */
-    more: Schema.Boolean,
-  },
+  ResultsChanged: { facets: Schema.NullOr(Facets) },
   BottomReached: {},
   Scrolled: { scrolled: Schema.Boolean },
   SearchWanted: {},
@@ -58,58 +51,56 @@ export const SearchPageNoDeps = Component.make({
   name: "SearchPage",
   props: Schema.Struct({ route: SearchRoute }),
   model: Schema.Struct({
-    results: ResultsSnapshot,
     /**
      * The filter ranges of the search, kept from its first results: applying
      * a filter narrows what the server reports next.
      */
     facets: Schema.NullOr(Facets),
-    more: Schema.Boolean,
     scrolled: Schema.Boolean,
   }),
   message: Message,
   events: SearchPageEvents,
   loaders: {
-    results: Component.debounce(searchDebounce, (_model, props) =>
-      searchArgs(props.route),
-    ),
-  },
-  init: ($) => ({ ...$.empty, facets: null, more: false, scrolled: false }),
-  update: (model, message, $) =>
-    Message.match(message, {
-      ResultsChanged: ({ facets, more, snapshot }) => ({
-        ...model,
-        results: snapshot,
-        more,
-        facets:
-          facets !== null && facets.query !== model.facets?.query
-            ? facets
-            : model.facets,
-      }),
-      BottomReached: () => (model.more ? $.loadMore("results") : model),
-      Scrolled: ({ scrolled }) => ({ ...model, scrolled }),
-      SearchWanted: () =>
-        $.set(model).emit(SearchPageEvents.make({ _tag: "SearchWanted" })),
-    }),
-  subscriptions: (_model, props, $) => [
-    $.watch({
-      results: (snapshot, loaded) =>
+    results: {
+      load: SearchProducts,
+      debounce: searchDebounce,
+      args: (_model, props) => searchArgs(props.route),
+      onChange: (result) =>
         Message.make({
           _tag: "ResultsChanged",
-          snapshot,
-          facets: Option.match(AsyncResult.value(loaded), {
+          facets: Option.match(AsyncResult.value(result), {
             onNone: () => null,
             onSome: ({ pages }) =>
               pages.length === 0
                 ? null
                 : { query: pages[0].query, price: priceFacet(pages[0]) },
           }),
-          more: Option.exists(
-            AsyncResult.value(loaded),
-            (list) => list.more._tag === "Available",
-          ),
         }),
+    },
+  },
+  init: () => ({ facets: null, scrolled: false }),
+  update: (model, message, $) =>
+    Message.match(message, {
+      ResultsChanged: ({ facets }) => ({
+        ...model,
+        facets:
+          facets !== null && facets.query !== model.facets?.query
+            ? facets
+            : model.facets,
+      }),
+      // Only when there is a next page that nothing is loading yet
+      BottomReached: () =>
+        Option.exists(
+          AsyncResult.value($.loaded.results),
+          (list) => list.more._tag === "Available",
+        )
+          ? $.loadMore("results")
+          : model,
+      Scrolled: ({ scrolled }) => ({ ...model, scrolled }),
+      SearchWanted: () =>
+        $.set(model).emit(SearchPageEvents.make({ _tag: "SearchWanted" })),
     }),
+  subscriptions: (_model, props) => [
     ...(searchArgs(props.route) === undefined
       ? []
       : [

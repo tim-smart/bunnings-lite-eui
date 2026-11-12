@@ -1,5 +1,5 @@
 import { Effect, Layer, Schema } from "effect"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Command, Component } from "effect/ui"
 import { icon } from "../../design/icons.ts"
 import { ProductCard } from "../../product/components/ProductCard.ts"
@@ -7,12 +7,9 @@ import { KnownProducts } from "../../product/services/KnownProducts.ts"
 import { ListFavorites } from "../loaders/ListFavorites.ts"
 import { Favorites } from "../services/Favorites.ts"
 
-const FavoritesSnapshot = Loader.Snapshot(ListFavorites, "favorites")
-
 export const FavoritesListMessage = Schema.TaggedUnion({
   Cleared: {},
   Done: {},
-  FavoritesChanged: { snapshot: FavoritesSnapshot },
 })
 const Message = FavoritesListMessage
 
@@ -33,12 +30,12 @@ export class ClearFavorites extends Command.Service<ClearFavorites>()(
 /** The favourites as a grid of product cards, newest first. */
 export const FavoritesListNoDeps = Component.make({
   name: "FavoritesList",
-  model: Schema.Struct({ favorites: FavoritesSnapshot }),
+  model: Schema.Struct({}),
   message: Message,
   loaders: {
-    favorites: () => ({}),
+    favorites: { load: ListFavorites, args: () => ({}) },
   },
-  init: ($) => $.empty,
+  init: () => ({}),
   update: (model, message, $) =>
     Message.match(message, {
       Cleared: () =>
@@ -48,14 +45,7 @@ export const FavoritesListNoDeps = Component.make({
           ),
         ),
       Done: () => model,
-      FavoritesChanged: ({ snapshot }) => ({ favorites: snapshot }),
     }),
-  subscriptions: (_model, _props, $) => [
-    $.watch({
-      favorites: (snapshot) =>
-        Message.make({ _tag: "FavoritesChanged", snapshot }),
-    }),
-  ],
   view: (_model, h) => {
     const favorites = AsyncResult.getOrElse(h.loaded.favorites, () => [])
     if (favorites.length === 0) {

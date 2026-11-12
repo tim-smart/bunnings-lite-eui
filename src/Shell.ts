@@ -1,6 +1,6 @@
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { EventLog } from "effect/eventlog"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Command, Component, Router, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { SessionLocation } from "../server/src/domain/Bunnings.ts"
@@ -25,8 +25,6 @@ import { Invites } from "./sync/services/Invites.ts"
 import { SyncRemote } from "./sync/services/SyncRemote.ts"
 import { SyncSettings } from "./sync/services/SyncSettings.ts"
 
-const ResultsSnapshot = Loader.SnapshotList(SearchProducts, "results")
-
 export const ShellMessage = Schema.TaggedUnion({
   SearchTyped: { text: Schema.String },
   SearchSubmitted: {},
@@ -37,7 +35,6 @@ export const ShellMessage = Schema.TaggedUnion({
   StoreSearchAsked: { asking: Schema.Boolean },
   StoreSearchAnswered: { store: Schema.Option(SessionLocation) },
   Done: {},
-  ResultsChanged: { snapshot: ResultsSnapshot },
 })
 const Message = ShellMessage
 
@@ -104,7 +101,6 @@ export const ShellNoDeps = Component.make({
   // The search itself belongs to the search page. It is watched here as
   // well, for the search box to show while it is running.
   model: Schema.Struct({
-    results: ResultsSnapshot,
     /** The drawer that is open. */
     drawer: Schema.NullOr(
       Schema.Literals(["syncSettings", "storeSearch", "invite"]),
@@ -112,11 +108,13 @@ export const ShellNoDeps = Component.make({
   }),
   message: Message,
   loaders: {
-    results: Component.debounce(searchDebounce, (_model, props) =>
-      searchArgs(props.route),
-    ),
+    results: {
+      load: SearchProducts,
+      debounce: searchDebounce,
+      args: (_model, props) => searchArgs(props.route),
+    },
   },
-  init: ($) => ({ ...$.empty, drawer: null }),
+  init: () => ({ drawer: null }),
   update: (model, message, $) =>
     Message.match(message, {
       SearchTyped: ({ text }) => {
@@ -190,14 +188,8 @@ export const ShellNoDeps = Component.make({
           drawer: model.drawer === "storeSearch" ? null : model.drawer,
         }).run(AnswerStoreSearch.make({ store }).pipe(done)),
       Done: () => model,
-      ResultsChanged: ({ snapshot }) => ({ ...model, results: snapshot }),
     }),
-  subscriptions: (_model, _props, $) => [
-    $.watch({
-      results: (snapshot) => Message.make({ _tag: "ResultsChanged", snapshot }),
-    }),
-    storeSearchAsked,
-  ],
+  subscriptions: () => [storeSearchAsked],
   view: (model, h) => {
     const { route } = h.props
     const query = queryOf(route)
