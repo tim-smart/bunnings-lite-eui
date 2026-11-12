@@ -1,4 +1,4 @@
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { EventLog } from "effect/eventlog"
 import { AsyncResult, Loader } from "effect/reactivity"
 import { Command, Component, Router, Subscription } from "effect/ui"
@@ -86,6 +86,11 @@ const syncSettingsRef = Html.ref("sync-settings-open", "button")
 
 const done = Command.map(() => Message.make({ _tag: "Done" }))
 
+const focusSyncSettings = Html.focus(syncSettingsRef, () =>
+  Message.make({ _tag: "Done" }),
+)
+const noStoreFound = AnswerStoreSearch.make({ store: Option.none() }).pipe(done)
+
 /**
  * The frame around every page: the header with the logo, the search box and
  * the sync settings, and the page the route names. It is mounted once any
@@ -93,7 +98,8 @@ const done = Command.map(() => Message.make({ _tag: "Done" }))
  *
  * The drawers are mounted here too, beside the page instead of inside it.
  * A drawer is a modal, so the page is `inert` while one is open, and that
- * can't be undone for anything inside it.
+ * can't be undone for anything inside it. Only one is open at a time. An
+ * invite can arrive at any moment, and closes whichever is open.
  */
 export const ShellNoDeps = Component.make({
   name: "Shell",
@@ -102,10 +108,10 @@ export const ShellNoDeps = Component.make({
   // well, for the search box to show while it is running.
   model: Schema.Struct({
     results: ResultsSnapshot,
-    // Which drawers are open
-    syncSettings: Schema.Boolean,
-    storeSearch: Schema.Boolean,
-    invite: Schema.Boolean,
+    /** The drawer that is open. */
+    drawer: Schema.NullOr(
+      Schema.Literals(["syncSettings", "storeSearch", "invite"]),
+    ),
   }),
   message: Message,
   loaders: {
@@ -113,12 +119,7 @@ export const ShellNoDeps = Component.make({
       searchArgs(props.route),
     ),
   },
-  init: ($) => ({
-    ...$.empty,
-    syncSettings: false,
-    storeSearch: false,
-    invite: false,
-  }),
+  init: ($) => ({ ...$.empty, drawer: null }),
   update: (model, message, $) =>
     Message.match(message, {
       SearchTyped: ({ text }) => {
@@ -150,20 +151,47 @@ export const ShellNoDeps = Component.make({
           }),
           ScrollToTop.make().pipe(done),
         ),
-      SyncSettingsOpened: () => ({ ...model, syncSettings: true }),
+      SyncSettingsOpened: () =>
+        model.drawer === null
+          ? { ...model, drawer: "syncSettings" as const }
+          : model,
       // The page is live again in the render that focus waits for
       SyncSettingsClosed: () =>
-        $.set({ ...model, syncSettings: false }).run(
-          Html.focus(syncSettingsRef, () => Message.make({ _tag: "Done" })),
-        ),
-      InviteChanged: ({ open }) => ({ ...model, invite: open }),
-      // False without an answer when the page that asked has gone
-      StoreSearchAsked: ({ asking }) => ({ ...model, storeSearch: asking }),
+        model.drawer === "syncSettings"
+          ? $.set({ ...model, drawer: null }).run(focusSyncSettings)
+          : model,
+      InviteChanged: ({ open }) => {
+        if (open) {
+          const next = { ...model, drawer: "invite" as const }
+          // The selector is still waiting to hear from its search
+          return model.drawer === "storeSearch"
+            ? $.set(next).run(noStoreFound)
+            : next
+        }
+        // An invite has nothing on the page that opened it, so focus goes
+        // to the button for what it was about
+        return model.drawer === "invite"
+          ? $.set({ ...model, drawer: null }).run(focusSyncSettings)
+          : model
+      },
+      StoreSearchAsked: ({ asking }) => {
+        if (!asking) {
+          // Without an answer when the page that asked has gone
+          return model.drawer === "storeSearch"
+            ? { ...model, drawer: null }
+            : model
+        }
+        if (model.drawer === null)
+          return { ...model, drawer: "storeSearch" as const }
+        // Asked just as another drawer opened, which keeps its place
+        return model.drawer === "storeSearch" ? model : $.run(noStoreFound)
+      },
       // Closed here first, so the page is live before the selector hears
       StoreSearchAnswered: ({ store }) =>
-        $.set({ ...model, storeSearch: false }).run(
-          AnswerStoreSearch.make({ store }).pipe(done),
-        ),
+        $.set({
+          ...model,
+          drawer: model.drawer === "storeSearch" ? null : model.drawer,
+        }).run(AnswerStoreSearch.make({ store }).pipe(done)),
       Done: () => model,
       ResultsChanged: ({ snapshot }) => ({ ...model, results: snapshot }),
     }),
@@ -235,7 +263,6 @@ export const ShellNoDeps = Component.make({
     })
 
     // A drawer is a modal: nothing behind it can be reached while it is open
-    const modal = model.syncSettings || model.storeSearch || model.invite
     const frame = h
       .div(
         h
@@ -355,7 +382,7 @@ export const ShellNoDeps = Component.make({
           .main(h.div(page).class("container mx-auto max-w-7xl"))
           .class("flex-1 bg-canvas px-3 sm:px-6 pb-24"),
       )
-      .attr("inert", modal ? "" : undefined)
+      .attr("inert", model.drawer === null ? undefined : "")
       .class("flex min-h-screen flex-col bg-brand")
 
     return h.div(
@@ -365,12 +392,12 @@ export const ShellNoDeps = Component.make({
         onEmit: ({ _tag }) =>
           Message.make({ _tag: "InviteChanged", open: _tag === "Opened" }),
       }),
-      model.syncSettings &&
+      model.drawer === "syncSettings" &&
         h.child(SyncSettingsPanel, {
           key: "sync-settings",
           onEmit: () => Message.make({ _tag: "SyncSettingsClosed" }),
         }),
-      model.storeSearch &&
+      model.drawer === "storeSearch" &&
         h.child(StoreSearch, {
           key: "store-search",
           onEmit: ({ store }) =>

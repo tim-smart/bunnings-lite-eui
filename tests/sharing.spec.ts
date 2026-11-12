@@ -84,6 +84,43 @@ test("declining an invite keeps the device's existing sync settings", async ({
   await friend.close()
 })
 
+test("an invite that arrives over an open drawer takes its place", async ({
+  context,
+  browser,
+}) => {
+  const { link } = await createInvite(context)
+
+  const friend = await browser.newContext({ baseURL: link.origin })
+  const page = await friend.newPage()
+  await page.goto("/")
+  const dialogs = page.getByRole("dialog")
+  const prompt = page.getByRole("dialog", { name: "Join shared sync?" })
+
+  for (const [opener, drawer] of [
+    ["Sync settings", "Sync settings"],
+    ["Search all stores", "Find your store"],
+  ]) {
+    await page.getByRole("button", { name: opener }).click()
+    await expect(page.getByRole("dialog", { name: drawer })).toBeVisible()
+
+    // An installed app gets a new link as a fragment change in its window
+    await page.evaluate((hash) => {
+      location.hash = hash
+    }, link.hash)
+
+    await expect(prompt).toBeVisible()
+    await expect(dialogs).toHaveCount(1)
+    await expect(prompt.getByRole("button", { name: "Cancel" })).toBeFocused()
+
+    await page.keyboard.press("Enter")
+    await expect(dialogs).toHaveCount(0)
+    await expect(
+      page.getByRole("button", { name: "Sync settings" }),
+    ).toBeFocused()
+  }
+  await friend.close()
+})
+
 test("joining while another tab is open asks to close it, then finishes", async ({
   context,
   browser,
