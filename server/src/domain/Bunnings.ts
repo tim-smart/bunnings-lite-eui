@@ -1,0 +1,697 @@
+import * as Context from "effect/Context"
+import * as DateTime from "effect/DateTime"
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
+import * as SchemaGetter from "effect/SchemaGetter"
+
+export class CurrentSession extends Context.Service<CurrentSession, Session>()(
+  "domain/Bunnings/CurrentSession",
+) {}
+
+export interface Site {
+  readonly website: string
+  readonly origin: string
+  readonly currency: string
+  readonly locale: string
+}
+
+export const sites: ReadonlyArray<Site> = [
+  {
+    website: "NZ",
+    origin: "https://www.bunnings.co.nz",
+    currency: "NZD",
+    locale: "en_NZ",
+  },
+  {
+    website: "AU",
+    origin: "https://www.bunnings.com.au",
+    currency: "AUD",
+    locale: "en_AU",
+  },
+]
+
+export const siteFor = (website: string): Site =>
+  sites.find((site) => site.website === website) ?? sites[0]
+
+export class SessionLocation extends Schema.TaggedClass<SessionLocation>(
+  "domain/Bunnings/SessionLocation",
+)("Set", {
+  region: Schema.String,
+  code: Schema.String,
+  city: Schema.String,
+  country: Schema.String,
+  state: Schema.String,
+  website: Schema.String,
+}) {
+  static fromStore(store: Store) {
+    return new SessionLocation({
+      region: store.pricingRegion,
+      code: store.name,
+      city: store.displayName,
+      country: store.address.country.name,
+      state: store.storeRegion,
+      website: store.address.country.isocode,
+    })
+  }
+
+  get lowerRegion() {
+    return this.region.toLowerCase()
+  }
+
+  get site() {
+    return siteFor(this.website)
+  }
+
+  httpHeaders = {
+    locationcode: this.code,
+    "x-region": this.region,
+    country: this.website,
+    currency: this.site.currency,
+    locale: this.site.locale,
+  }
+
+  searchContext = {
+    city: this.city,
+    country: this.country,
+    region: this.region,
+    state: this.state,
+    website: this.website,
+  }
+}
+
+export class SessionUnsetLocation extends Schema.TaggedClass<SessionUnsetLocation>(
+  "domain/Bunnings/SessionUnsetLocation",
+)("Unset", {
+  country: Schema.String,
+  website: Schema.String,
+  code: Schema.String,
+  region: Schema.String,
+  state: Schema.String,
+}) {
+  static default = new SessionUnsetLocation({
+    country: "New Zealand",
+    website: "NZ",
+    code: "9489",
+    region: "NI_Zone_9",
+    state: "NI",
+  })
+
+  get lowerRegion() {
+    return this.region.toLowerCase()
+  }
+
+  get site() {
+    return siteFor(this.website)
+  }
+
+  httpHeaders = {
+    country: this.website,
+    currency: this.site.currency,
+    locale: this.site.locale,
+  }
+
+  searchContext = {
+    country: this.country,
+    website: this.website,
+  }
+}
+
+export class SessionToken extends Schema.Class<SessionToken>(
+  "domain/Bunnings/SessionToken",
+)({
+  expires: Schema.DateTimeUtcFromMillis,
+  token: Schema.String,
+}) {
+  static fromFragment = Effect.fnUntraced(function* (fragment: string) {
+    const { access_token, expires_in } = yield* decodeTokenFragment(
+      new URLSearchParams(fragment),
+    )
+    const now = yield* DateTime.now
+    return new SessionToken({
+      token: access_token,
+      expires: DateTime.add(now, { seconds: expires_in }),
+    })
+  })
+}
+
+const decodeTokenFragment = Schema.decodeEffect(
+  Schema.fromURLSearchParams(
+    Schema.Struct({
+      access_token: Schema.String,
+      expires_in: Schema.FiniteFromString,
+    }),
+  ),
+)
+
+export class Session extends Schema.Class<Session>("domain/Bunnings/Session")({
+  id: Schema.String,
+  token: SessionToken,
+  location: Schema.Union([SessionLocation, SessionUnsetLocation]),
+}) {
+  get expired() {
+    return this.token.expires.pipe(
+      DateTime.subtract({ hours: 1 }),
+      DateTime.isPastUnsafe,
+    )
+  }
+
+  withLocation(location: SessionLocation) {
+    return new Session({
+      ...this,
+      location,
+    })
+  }
+}
+
+const ImageUrl = Schema.optional(Schema.String).pipe(
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.withDefault(
+      Effect.succeed(
+        "https://www.bunnings.co.nz/static/icons/notFoundImage.svg",
+      ),
+    ),
+    encode: SchemaGetter.passthrough(),
+  }),
+)
+const NumberOrZero = Schema.Number.pipe(
+  Schema.withDecodingDefault(Effect.succeed(0)),
+)
+
+export class SearchResult extends Schema.Class<SearchResult>("SearchResult")({
+  thumbnailimageurl: ImageUrl,
+  isactive: Schema.String,
+  ratingcount: NumberOrZero,
+  permanentid: Schema.String,
+  title: Schema.String,
+  productroutingurl: Schema.String,
+  rating: NumberOrZero,
+  size: Schema.Number,
+  name: Schema.String,
+  price: Schema.Number,
+  imageurl: ImageUrl,
+  uri: Schema.String,
+}) {
+  toBaseInfo(site: Site) {
+    return new ProductBaseInfo({
+      id: this.permanentid,
+      url: site.origin + this.productroutingurl,
+      title: this.title,
+      images: [
+        new ImageElement({
+          url: this.imageurl,
+          thumbnailUrl: this.thumbnailimageurl,
+          mime: "image/jpeg",
+          sequence: "0",
+        }),
+      ],
+      price: this.price,
+      numberOfReviews: this.ratingcount,
+      rating: this.rating,
+    })
+  }
+}
+
+export class SearchResultWrap extends Schema.Class<SearchResultWrap>(
+  "SearchResultWrap",
+)({
+  raw: SearchResult,
+}) {}
+
+export class ImageElement extends Schema.Class<ImageElement>("ImageElement")({
+  altText: Schema.optional(Schema.NullOr(Schema.String)),
+  format: Schema.optional(Schema.NullOr(Schema.String)),
+  imageType: Schema.optional(Schema.NullOr(Schema.String)),
+  mime: Schema.String,
+  sequence: Schema.String,
+  thumbnailUrl: ImageUrl,
+  url: ImageUrl,
+  videoId: Schema.optional(Schema.NullOr(Schema.String)),
+}) {}
+
+export class ProductBaseInfo extends Schema.Class<ProductBaseInfo>(
+  "ProductBaseInfo",
+)({
+  id: Schema.String,
+  title: Schema.String,
+  url: Schema.String,
+  images: Schema.NonEmptyArray(ImageElement),
+  price: Schema.Number,
+  numberOfReviews: Schema.Number,
+  rating: Schema.Number,
+}) {}
+
+export class FacetValue extends Schema.Class<FacetValue>("FacetValue")({
+  start: Schema.Number,
+  end: Schema.Number,
+  endInclusive: Schema.Boolean,
+}) {}
+
+export class Facet extends Schema.Class<Facet>("Facet")({
+  facetId: Schema.String,
+  values: Schema.Array(FacetValue),
+}) {}
+
+export class SearchResponseDataRaw extends Schema.Class<SearchResponseDataRaw>(
+  "SearchResponseDataRaw",
+)({
+  totalCount: Schema.Number,
+  facets: Schema.Array(Facet),
+  results: Schema.Array(SearchResultWrap),
+}) {}
+
+export class SearchResponseData extends Schema.Class<SearchResponseData>(
+  "SearchResponseData",
+)({
+  totalCount: Schema.Number,
+  facets: Schema.Array(Facet),
+  results: Schema.Array(ProductBaseInfo),
+}) {}
+
+export const SearchResponseDataRemapped = Schema.Json.pipe(
+  Schema.decodeTo(SearchResponseDataRaw, {
+    decode: SchemaGetter.transformEffect((data: any) =>
+      CurrentSession.useSync((session) => ({
+        totalCount: data.totalCount,
+        facets: data.facets.map((facet: any) => ({
+          ...facet,
+          facetId: facet.facetId.replace(`_${session.location.code}`, ""),
+        })),
+        results: data.results.map((result: any) => ({
+          raw: {
+            ...result.raw,
+            price: result.raw[`price_${session.location.code}`],
+          },
+        })),
+      })),
+    ),
+    encode: SchemaGetter.passthrough(),
+  }),
+  Schema.decodeTo(SearchResponseData, {
+    decode: SchemaGetter.transformEffect((fromA) =>
+      CurrentSession.useSync(
+        (session) =>
+          new SearchResponseData({
+            ...fromA,
+            results: fromA.results.map((_) =>
+              _.raw.toBaseInfo(session.location.site),
+            ),
+          }),
+      ),
+    ),
+    encode: SchemaGetter.forbidden(() => "Decode only"),
+  }),
+)
+
+export const SearchResponse = Schema.Struct({
+  data: SearchResponseDataRemapped,
+})
+
+export class GuideDocument extends Schema.Class<GuideDocument>("GuideDocument")(
+  {
+    altText: Schema.optional(Schema.NullOr(Schema.String)),
+    docType: Schema.String,
+    mime: Schema.String,
+    sequence: Schema.String,
+    size: Schema.Number,
+    thumbnailUrl: ImageUrl,
+    url: Schema.String,
+  },
+) {}
+
+export class DataFeature extends Schema.Class<DataFeature>("DataFeature")({
+  description: Schema.String,
+  pointers: Schema.optional(Schema.Array(Schema.String)),
+}) {}
+
+export class Product extends Schema.Class<Product>("Product")({
+  depth: Schema.String,
+  height: Schema.String,
+  width: Schema.String,
+  label: Schema.optional(Schema.NullOr(Schema.String)),
+}) {}
+
+export class Package extends Schema.Class<Package>("Package")({
+  height: Schema.String,
+  length: Schema.String,
+  width: Schema.String,
+}) {}
+
+export class Dimension extends Schema.Class<Dimension>("Dimension")({
+  packages: Schema.Array(Package).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  product: Schema.Array(Product).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  dimensionTerm: Schema.optional(Schema.NullOr(Schema.String)),
+}) {}
+
+export class FeatureValue extends Schema.Class<FeatureValue>("FeatureValue")({
+  value: Schema.String,
+}) {}
+
+export class FeatureElement extends Schema.Class<FeatureElement>(
+  "FeatureElement",
+)({
+  code: Schema.String,
+  comparable: Schema.Boolean,
+  featureValues: Schema.Array(FeatureValue),
+  name: Schema.String,
+  range: Schema.Boolean,
+}) {}
+
+export class Classification extends Schema.Class<Classification>(
+  "Classification",
+)({
+  features: Schema.Array(FeatureElement),
+  code: Schema.optional(Schema.NullOr(Schema.String)),
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+}) {}
+
+export class BrandImage extends Schema.Class<BrandImage>("BrandImage")({
+  mime: Schema.String,
+  sequence: Schema.String,
+  thumbnailUrl: ImageUrl,
+  url: ImageUrl,
+  disclaimer: Schema.optional(Schema.NullOr(Schema.String)),
+}) {}
+
+export class Brand extends Schema.Class<Brand>("Brand")({
+  brandUrl: Schema.String,
+  code: Schema.String,
+  image: Schema.optional(BrandImage),
+  isLeadingBrand: Schema.Boolean,
+  isMarketPlaceBrand: Schema.Boolean,
+  isTradeBrand: Schema.Boolean,
+  name: Schema.String,
+}) {}
+
+export class ProductValue extends Schema.Class<ProductValue>("ProductValue")({
+  displayOrder: Schema.Number,
+  name: Schema.String,
+  value: Schema.String,
+}) {}
+
+export class BasePaint extends Schema.Class<BasePaint>("BasePaint")({
+  colorName: Schema.String,
+}) {}
+
+export class Selected extends Schema.Class<Selected>("Selected")({
+  basePaint: Schema.optional(Schema.NullOr(BasePaint)),
+  code: Schema.String,
+  itemNumber: Schema.String,
+  productValues: Schema.Array(ProductValue),
+  routingUrl: Schema.String,
+}) {}
+
+export class BaseOption extends Schema.Class<BaseOption>("BaseOption")({
+  selected: Selected,
+  variantType: Schema.String,
+}) {}
+
+export class AllCategory extends Schema.Class<AllCategory>("AllCategory")({
+  code: Schema.String,
+  displayName: Schema.String,
+  internalPath: Schema.String,
+  level: Schema.Number,
+  workShopCategory: Schema.optional(Schema.NullOr(Schema.String)),
+}) {}
+
+export class ProductInfo extends Schema.Class<ProductInfo>("ProductInfo")({
+  allCategories: Schema.Array(AllCategory),
+  availableForDelivery: Schema.Boolean,
+  averageRating: NumberOrZero,
+  baseOptions: Schema.Array(BaseOption),
+  bestSeller: Schema.Boolean,
+  brand: Brand,
+  defaultVariant: Schema.Boolean,
+  dimension: Dimension,
+  feature: DataFeature,
+  images: Schema.NonEmptyArray(ImageElement),
+  instorePickup: Schema.Boolean,
+  isAREnabled: Schema.Boolean,
+  isActive: Schema.Boolean,
+  isAgeRestricted: Schema.Boolean,
+  isDangerousGood: Schema.Boolean,
+  isPOAProduct: Schema.Boolean,
+  isSpecialProduct: Schema.Boolean,
+  isTradeOnly: Schema.Boolean,
+  isWorkflowRequired: Schema.Boolean,
+  itemNumber: Schema.String,
+  manufacturer: Schema.optional(Schema.NullOr(Schema.String)),
+  name: Schema.String,
+  newArrival: Schema.Boolean,
+  numberOfReviews: Schema.Number,
+  productLinks: Schema.Array(Schema.String),
+  purchasable: Schema.Boolean,
+  summary: Schema.String,
+  sustainabilityInformation: Schema.String,
+  transactable: Schema.Boolean,
+  unitofprice: Schema.String,
+  url: Schema.String,
+  visible: Schema.Boolean,
+  warrantyReturns: Schema.String,
+  weight: Schema.optional(Schema.String),
+  guideDocument: Schema.optional(Schema.NullOr(Schema.Array(GuideDocument))),
+  classifications: Schema.Array(Classification).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+}) {
+  get specifications(): ReadonlyArray<Specification> {
+    const specs: Array<Specification> = [
+      { name: "Brand", value: this.brand.name },
+    ]
+    for (const classification of this.classifications) {
+      for (const feature of classification.features) {
+        specs.push(
+          specification(
+            feature.name,
+            feature.featureValues.map((_) => _.value.trim()).join(", "),
+          ),
+        )
+      }
+    }
+    // Product dimensions come through as bare millimetres, and weight as kg.
+    const product = this.dimension.product[0]
+    if (product) {
+      specs.push(
+        { name: "Height", value: withUnit(product.height, "mm") },
+        { name: "Width", value: withUnit(product.width, "mm") },
+        { name: "Depth", value: withUnit(product.depth, "mm") },
+      )
+    }
+    if (this.weight) {
+      specs.push({ name: "Weight", value: withUnit(this.weight, "kg") })
+    }
+    return specs.filter((_) => _.name.trim() !== "" && _.value.trim() !== "")
+  }
+}
+
+export interface Specification {
+  readonly name: string
+  readonly value: string
+}
+
+const numeric = /^[\d.]+$/
+
+const withUnit = (value: string, unit: string) =>
+  numeric.test(value.trim()) ? `${value.trim()} ${unit}` : value
+
+// Bunnings puts the unit in the feature name, e.g. "Wattage (watts)" with a
+// value of "2400", and marks boolean features as "Indoor (Yes/No)". Move the
+// unit onto the value and drop the Yes/No hint so the rows read naturally.
+const specification = (name: string, value: string): Specification => {
+  const match = /^(.*?)\s*\(([^()]+)\)$/.exec(name.trim())
+  if (!match) return { name: name.trim(), value }
+  const [, base, unit] = match
+  if (unit.toLowerCase() === "yes/no") return { name: base, value }
+  if (numeric.test(value)) return { name: base, value: `${value} ${unit}` }
+  return { name: name.trim(), value }
+}
+
+export class ProductResponse extends Schema.Class<ProductResponse>(
+  "ProductResponse",
+)({
+  data: ProductInfo,
+}) {}
+
+export class PriceInfo extends Schema.Class<PriceInfo>("PriceInfo")({
+  currencyIso: Schema.String,
+  formattedValue: Schema.String,
+  priceAvailable: Schema.Boolean,
+  priceType: Schema.String,
+  value: Schema.Number,
+}) {}
+
+export class PriceResponse extends Schema.Class<PriceResponse>("PriceResponse")(
+  {
+    data: PriceInfo,
+  },
+) {}
+
+export class ProductPriceInfo extends Schema.Class<ProductPriceInfo>(
+  "ProductPriceInfo",
+)({
+  info: ProductInfo,
+  price: PriceInfo,
+  website: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("NZ"))),
+}) {
+  get asBaseInfo() {
+    return new ProductBaseInfo({
+      id: this.info.itemNumber,
+      url:
+        siteFor(this.website).origin +
+        this.info.baseOptions[0].selected.routingUrl,
+      title: this.info.name,
+      images: this.info.images,
+      price: this.price.value,
+      numberOfReviews: this.info.numberOfReviews,
+      rating: this.info.averageRating,
+    })
+  }
+}
+
+class GeoPoint extends Schema.Class<GeoPoint>("GeoPoint")({
+  latitude: Schema.Number,
+  longitude: Schema.Number,
+}) {}
+
+class Country extends Schema.Class<Country>("Country")({
+  isocode: Schema.String,
+  name: Schema.String,
+}) {}
+
+class Address extends Schema.Class<Address>("Address")({
+  billingAddress: Schema.Boolean,
+  country: Country,
+  creationtime: Schema.String,
+  defaultAddress: Schema.Boolean,
+  email: Schema.String,
+  fax: Schema.optional(Schema.NullOr(Schema.String)),
+  firstName: Schema.String,
+  formattedAddress: Schema.String,
+  id: Schema.String,
+  isPoBoxAddress: Schema.Boolean,
+  line1: Schema.String,
+  line2: Schema.optional(Schema.NullOr(Schema.String)),
+  phone: Schema.String,
+  postalCode: Schema.String,
+  shippingAddress: Schema.Boolean,
+  town: Schema.String,
+  visibleInAddressBook: Schema.Boolean,
+}) {}
+
+export class Store extends Schema.Class<Store>("Store")({
+  address: Address,
+  displayName: Schema.String,
+  formattedDistance: Schema.String,
+  geoPoint: GeoPoint,
+  isActiveLocation: Schema.Boolean,
+  mapUrl: Schema.optional(Schema.String),
+  name: Schema.String,
+  pricingRegion: Schema.String,
+  storeRegion: Schema.String,
+  storeZone: Schema.String,
+  timeZone: Schema.String,
+  type: Schema.String,
+  url: Schema.String,
+  urlRegion: Schema.String,
+}) {}
+
+class Pagination extends Schema.Class<Pagination>("Pagination")({
+  currentPage: Schema.Number,
+  pageSize: Schema.Number,
+  totalPages: Schema.Number,
+  totalResults: Schema.Number,
+}) {}
+
+export class StoresData extends Schema.Class<StoresData>("StoresData")({
+  boundEastLongitude: Schema.Number,
+  boundNorthLatitude: Schema.Number,
+  boundSouthLatitude: Schema.Number,
+  boundWestLongitude: Schema.Number,
+  pagination: Pagination,
+  sourceLatitude: Schema.Number,
+  sourceLongitude: Schema.Number,
+  stores: Schema.Array(Store),
+}) {}
+
+export class StoresResponse extends Schema.Class<StoresResponse>(
+  "StoresResponse",
+)({
+  data: StoresData,
+}) {}
+
+// The stores endpoint only searches the country in the `country` header, and
+// responds with this error when that country has no stores nearby.
+export class StoresNotFound extends Schema.Class<StoresNotFound>(
+  "StoresNotFound",
+)({
+  statusDetails: Schema.Struct({
+    errorCode: Schema.Literal("BUS-4455"),
+  }),
+}) {}
+
+// fullfillment
+
+export class InStorePickUpData extends Schema.Class<InStorePickUpData>(
+  "InStorePickUpData",
+)({
+  inStoreStockMsg: Schema.String,
+  stock: NumberOrZero,
+}) {}
+
+export class FulfillmentInfo extends Schema.Class<FulfillmentInfo>(
+  "FulfillmentInfo",
+)({
+  addToCartEnabled: Schema.Boolean,
+  availableInStore: Schema.Boolean,
+  disableStockVisibility: Schema.Boolean,
+  driveNCollect: Schema.String,
+  inStorePickUpData: InStorePickUpData,
+  isActive: Schema.Boolean,
+  isSpecialProduct: Schema.Boolean,
+  poa: Schema.Boolean,
+}) {}
+
+export class FulfillmentResponse extends Schema.Class<FulfillmentResponse>(
+  "FulfillmentResponse",
+)({
+  data: FulfillmentInfo,
+}) {}
+
+// item location
+
+export class InStoreLocation extends Schema.Class<InStoreLocation>(
+  "InStoreLocation",
+)({
+  aisle: Schema.String,
+  bay: Schema.String,
+  sequence: Schema.String,
+}) {}
+
+export class ItemLocations extends Schema.Class<ItemLocations>("ItemLocations")(
+  {
+    inStoreLocations: Schema.Array(InStoreLocation),
+  },
+) {}
+
+export class ItemLocationResponse extends Schema.Class<ItemLocationResponse>(
+  "ItemLocationResponse",
+)({
+  data: Schema.Array(ItemLocations),
+}) {}
+
+export class FulfillmentInfoWithLocation extends Schema.Class<FulfillmentInfoWithLocation>(
+  "FulfillmentInfoWithLocation",
+)({
+  fulfillment: FulfillmentInfo,
+  location: Schema.OptionFromOptionalNullOr(InStoreLocation),
+}) {
+  get isAvailable() {
+    return (
+      this.fulfillment.inStorePickUpData.inStoreStockMsg ===
+      "itemsAvailableInStock"
+    )
+  }
+}
