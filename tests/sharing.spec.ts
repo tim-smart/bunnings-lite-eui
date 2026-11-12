@@ -17,9 +17,9 @@ async function readSyncSettings(page: Page) {
   return settings
 }
 
-async function createInvite(context: BrowserContext) {
+async function createInvite(context: BrowserContext, remote = sharedRemote) {
   await context.grantPermissions(["clipboard-read", "clipboard-write"])
-  await seedRemote(context, sharedRemote)
+  await seedRemote(context, remote)
   const page = await context.newPage()
   await page.goto("/")
   const settings = await readSyncSettings(page)
@@ -89,12 +89,19 @@ test("an invite that arrives over an open drawer takes its place", async ({
   browser,
 }) => {
   const { link } = await createInvite(context)
+  const other = await createInvite(context, "ws://127.0.0.1:65534/")
 
   const friend = await browser.newContext({ baseURL: link.origin })
   const page = await friend.newPage()
   await page.goto("/")
   const dialogs = page.getByRole("dialog")
   const prompt = page.getByRole("dialog", { name: "Join shared sync?" })
+  const cancel = prompt.getByRole("button", { name: "Cancel" })
+  // An installed app gets a new link as a fragment change in its window
+  const arrive = (invite: URL) =>
+    page.evaluate((hash) => {
+      location.hash = hash
+    }, invite.hash)
 
   for (const [opener, drawer] of [
     ["Sync settings", "Sync settings"],
@@ -103,14 +110,10 @@ test("an invite that arrives over an open drawer takes its place", async ({
     await page.getByRole("button", { name: opener }).click()
     await expect(page.getByRole("dialog", { name: drawer })).toBeVisible()
 
-    // An installed app gets a new link as a fragment change in its window
-    await page.evaluate((hash) => {
-      location.hash = hash
-    }, link.hash)
-
+    await arrive(link)
     await expect(prompt).toBeVisible()
     await expect(dialogs).toHaveCount(1)
-    await expect(prompt.getByRole("button", { name: "Cancel" })).toBeFocused()
+    await expect(cancel).toBeFocused()
 
     await page.keyboard.press("Enter")
     await expect(dialogs).toHaveCount(0)
@@ -118,6 +121,15 @@ test("an invite that arrives over an open drawer takes its place", async ({
       page.getByRole("button", { name: "Sync settings" }),
     ).toBeFocused()
   }
+
+  // Over another invite, Enter must not join the one that replaced it
+  await arrive(link)
+  await page.keyboard.press("Tab")
+  await expect(prompt.getByRole("button", { name: "Join" })).toBeFocused()
+  await arrive(other.link)
+  await expect(prompt).toContainText("127.0.0.1:65534")
+  await expect(dialogs).toHaveCount(1)
+  await expect(cancel).toBeFocused()
   await friend.close()
 })
 

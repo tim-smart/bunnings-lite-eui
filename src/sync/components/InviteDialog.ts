@@ -1,6 +1,7 @@
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { AsyncResult, Loader } from "effect/reactivity"
 import { Command, Component, Subscription } from "effect/ui"
+import { Html } from "effect/ui/html"
 import { buttonClass } from "../../design/classes.ts"
 import { drawer, drawerFooter, drawerHeader } from "../../design/drawer.ts"
 import { PendingInvite } from "../domain/Invite.ts"
@@ -19,7 +20,7 @@ export const InviteDialogMessage = Schema.TaggedUnion({
 })
 const Message = InviteDialogMessage
 
-/** Whether the dialog is showing, for its owner to make the page inert. */
+/** Whether the dialog is showing, for its owner to close any other drawer. */
 export const InviteDialogEvents = Schema.TaggedUnion({
   Opened: {},
   Closed: {},
@@ -49,6 +50,9 @@ const invitesOpened = Subscription.make(
   ),
 )
 
+/** The button that turns the invite down: Cancel, or Close on a bad link. */
+const dismissRef = Html.ref("invite-dismiss", "button")
+
 /**
  * Asks before joining through an invite link the page was opened with, and
  * says so when the link can't be read. It is a drawer, and `Shell`
@@ -69,10 +73,13 @@ export const InviteDialogNoDeps = Component.make({
   init: ($) => ({ ...$.empty, invite: null }),
   update: (model, message, $) =>
     Message.match(message, {
+      // An invite can replace one that is already showing, and `autofocus`
+      // only counts when a dialog is shown. Focus is moved for every invite,
+      // so that Enter never joins one the user hasn't read.
       InviteOpened: ({ invite }) =>
-        $.set({ ...model, invite }).emit(
-          InviteDialogEvents.make({ _tag: "Opened" }),
-        ),
+        $.set({ ...model, invite })
+          .run(Html.focus(dismissRef, () => Message.make({ _tag: "Done" })))
+          .emit(InviteDialogEvents.make({ _tag: "Opened" })),
       Dismissed: () =>
         $.set({ ...model, invite: null }).emit(
           InviteDialogEvents.make({ _tag: "Closed" }),
@@ -113,6 +120,7 @@ export const InviteDialogNoDeps = Component.make({
           h,
           h
             .button("Close")
+            .ref(dismissRef)
             .attr("type", "button")
             .class(buttonClass({ variant: "outline" }))
             .onClick(dismissed),
@@ -166,8 +174,7 @@ export const InviteDialogNoDeps = Component.make({
         h,
         h
           .button("Cancel")
-          // Joining replaces this device's favourites, so it isn't the default
-          .attr("autofocus", "")
+          .ref(dismissRef)
           .attr("type", "button")
           .class(buttonClass({ variant: "outline" }))
           .onClick(dismissed),
