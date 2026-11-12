@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema, Stream } from "effect"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Command, Component, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { buttonClass } from "../../design/classes.ts"
@@ -9,14 +9,11 @@ import { GetSyncSettings } from "../loaders/GetSyncSettings.ts"
 import { Invites } from "../services/Invites.ts"
 import { SyncSettings } from "../services/SyncSettings.ts"
 
-const SettingsSnapshot = Loader.Snapshot(GetSyncSettings, "settings")
-
 export const InviteDialogMessage = Schema.TaggedUnion({
   InviteOpened: { invite: PendingInvite },
   Dismissed: {},
   Joined: {},
   Done: {},
-  SettingsChanged: { snapshot: SettingsSnapshot },
 })
 const Message = InviteDialogMessage
 
@@ -61,16 +58,15 @@ const dismissRef = Html.ref("invite-dismiss", "button")
 export const InviteDialogNoDeps = Component.make({
   name: "InviteDialog",
   model: Schema.Struct({
-    settings: SettingsSnapshot,
     /** The invite waiting for an answer. */
     invite: Schema.NullOr(PendingInvite),
   }),
   message: Message,
   events: InviteDialogEvents,
   loaders: {
-    settings: () => ({}),
+    settings: { load: GetSyncSettings, args: () => ({}) },
   },
-  init: ($) => ({ ...$.empty, invite: null }),
+  init: () => ({ invite: null }),
   update: (model, message, $) =>
     Message.match(message, {
       // An invite can replace one that is already showing, and `autofocus`
@@ -93,15 +89,8 @@ export const InviteDialogNoDeps = Component.make({
           )
           .emit(InviteDialogEvents.make({ _tag: "Closed" })),
       Done: () => model,
-      SettingsChanged: ({ snapshot }) => ({ ...model, settings: snapshot }),
     }),
-  subscriptions: (_model, _props, $) => [
-    $.watch({
-      settings: (snapshot) =>
-        Message.make({ _tag: "SettingsChanged", snapshot }),
-    }),
-    invitesOpened,
-  ],
+  subscriptions: () => [invitesOpened],
   view: (model, h) => {
     const { invite } = model
     if (invite === null) return h.div()

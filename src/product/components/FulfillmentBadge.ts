@@ -1,16 +1,10 @@
 import { Layer, Option, Schema } from "effect"
 import { Session } from "../../rpc/services/Session.ts"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Component } from "effect/ui"
 import { badgeClass } from "../../design/classes.ts"
 import { icon } from "../../design/icons.ts"
 import { GetFulfillment } from "../loaders/GetFulfillment.ts"
-
-const FulfillmentSnapshot = Loader.Snapshot(GetFulfillment, "fulfillment")
-
-export const FulfillmentBadgeMessage = Schema.TaggedUnion({
-  FulfillmentChanged: { snapshot: FulfillmentSnapshot },
-})
 
 /**
  * Where a product is in the chosen store, or that the store is out of it. It
@@ -25,19 +19,16 @@ export const FulfillmentBadgeNoDeps = Component.make({
     /** Classes for the wrapper, which places the badge. */
     class: Schema.String,
   }),
-  model: Schema.Struct({ fulfillment: FulfillmentSnapshot }),
-  message: FulfillmentBadgeMessage,
+  model: Schema.Struct({}),
+  message: Schema.Never,
   loaders: {
-    fulfillment: (_model, props) => ({ id: props.id }),
+    fulfillment: {
+      load: GetFulfillment,
+      args: (_model, props) => ({ id: props.id }),
+    },
   },
-  init: ($) => $.empty,
-  update: (_model, message) => ({ fulfillment: message.snapshot }),
-  subscriptions: (_model, _props, $) => [
-    $.watch({
-      fulfillment: (snapshot) =>
-        FulfillmentBadgeMessage.make({ _tag: "FulfillmentChanged", snapshot }),
-    }),
-  ],
+  init: () => ({}),
+  update: (model) => model,
   view: (_model, h) => {
     const fulfillment = Option.flatten(AsyncResult.value(h.loaded.fulfillment))
     const badge = Option.match(fulfillment, {

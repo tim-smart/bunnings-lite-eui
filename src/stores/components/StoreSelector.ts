@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Command, Component } from "effect/ui"
 import { Html } from "effect/ui/html"
 import {
@@ -13,9 +13,6 @@ import { CurrentStore } from "../loaders/CurrentStore.ts"
 import { NearbyStores } from "../loaders/NearbyStores.ts"
 import { StoreSearchPrompt } from "../services/StoreSearchPrompt.ts"
 
-const CurrentSnapshot = Loader.Snapshot(CurrentStore, "current")
-const NearbySnapshot = Loader.Snapshot(NearbyStores, "nearby")
-
 export const StoreSelectorMessage = Schema.TaggedUnion({
   Reached: {},
   StoreChosen: { location: SessionLocation },
@@ -24,11 +21,9 @@ export const StoreSelectorMessage = Schema.TaggedUnion({
   SearchAnswered: { store: Schema.Option(SessionLocation) },
   Done: {},
   CurrentChanged: {
-    snapshot: CurrentSnapshot,
     /** The code of the store the session has, once it is known. */
     code: Schema.NullOr(Schema.String),
   },
-  NearbyChanged: { snapshot: NearbySnapshot },
 })
 const Message = StoreSelectorMessage
 
@@ -81,18 +76,29 @@ export const StoreSelectorNoDeps = Component.make({
     nearbyWanted: Schema.Boolean,
     /** The store just chosen, until the session has it too. */
     chosen: Schema.NullOr(SessionLocation),
-    current: CurrentSnapshot,
-    nearby: NearbySnapshot,
   }),
   message: Message,
   loaders: {
-    current: () => ({}),
+    current: {
+      load: CurrentStore,
+      args: () => ({}),
+      onChange: (result) =>
+        Message.make({
+          _tag: "CurrentChanged",
+          code: Option.match(Option.flatten(AsyncResult.value(result)), {
+            onNone: () => null,
+            onSome: (location) => location.code,
+          }),
+        }),
+    },
     // Asking for nearby stores asks for the device's location, so it waits
     // until the picker is reached for
-    nearby: (model) => (model.nearbyWanted ? {} : undefined),
+    nearby: {
+      load: NearbyStores,
+      args: (model) => (model.nearbyWanted ? {} : undefined),
+    },
   },
-  init: ($) => ({
-    ...$.empty,
+  init: () => ({
     nearbyWanted: false,
     chosen: null,
   }),
@@ -127,27 +133,11 @@ export const StoreSelectorNoDeps = Component.make({
         })
       },
       Done: () => model,
-      CurrentChanged: ({ snapshot, code }) => ({
+      CurrentChanged: ({ code }) => ({
         ...model,
-        current: snapshot,
         chosen: model.chosen?.code === code ? null : model.chosen,
       }),
-      NearbyChanged: ({ snapshot }) => ({ ...model, nearby: snapshot }),
     }),
-  subscriptions: (_model, _props, $) => [
-    $.watch({
-      current: (snapshot, loaded) =>
-        Message.make({
-          _tag: "CurrentChanged",
-          snapshot,
-          code: Option.match(Option.flatten(AsyncResult.value(loaded)), {
-            onNone: () => null,
-            onSome: (location) => location.code,
-          }),
-        }),
-      nearby: (snapshot) => Message.make({ _tag: "NearbyChanged", snapshot }),
-    }),
-  ],
   view: (model, h) => {
     const current = Option.flatten(AsyncResult.value(h.loaded.current))
     const shown = model.chosen === null ? current : Option.some(model.chosen)

@@ -1,5 +1,5 @@
 import { DateTime, Effect, Layer, Option, Schema } from "effect"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Command, Component, Router } from "effect/ui"
 import type { ProductReview } from "../../../server/src/domain/Bazaar.ts"
 import type {
@@ -25,25 +25,12 @@ import { KnownProducts } from "../../product/services/KnownProducts.ts"
 import { ReviewFeed } from "../../product/services/ReviewFeed.ts"
 import { Session } from "../../rpc/services/Session.ts"
 
-const ProductSnapshot = Loader.Snapshot(GetProduct, "product")
-const KnownSnapshot = Loader.Snapshot(GetKnownProduct, "known")
-const StatsSnapshot = Loader.Snapshot(GetReviewStats, "stats")
-const ReviewsSnapshot = Loader.SnapshotList(ListReviews, "reviews")
-
 export const ProductPageMessage = Schema.TaggedUnion({
   ImageChosen: { index: Schema.Number },
   BackPressed: {},
   SharePressed: { title: Schema.String },
   BottomReached: {},
   Done: {},
-  ProductChanged: { snapshot: ProductSnapshot },
-  KnownChanged: { snapshot: KnownSnapshot },
-  StatsChanged: { snapshot: StatsSnapshot },
-  ReviewsChanged: {
-    snapshot: ReviewsSnapshot,
-    /** Whether there are more reviews that nothing is loading yet. */
-    more: Schema.Boolean,
-  },
 })
 const Message = ProductPageMessage
 
@@ -68,56 +55,40 @@ export const ProductPageNoDeps = Component.make({
   name: "ProductPage",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({
-    product: ProductSnapshot,
-    known: KnownSnapshot,
-    stats: StatsSnapshot,
-    reviews: ReviewsSnapshot,
     /** Which photo is showing. */
     image: Schema.Number,
-    moreReviews: Schema.Boolean,
   }),
   message: Message,
   loaders: {
-    product: (_model, props) => ({ id: props.id }),
-    known: (_model, props) => ({ id: props.id }),
-    stats: (_model, props) => ({ id: props.id }),
-    reviews: (_model, props) => ({ id: props.id }),
+    product: { load: GetProduct, args: (_model, props) => ({ id: props.id }) },
+    known: {
+      load: GetKnownProduct,
+      args: (_model, props) => ({ id: props.id }),
+    },
+    stats: {
+      load: GetReviewStats,
+      args: (_model, props) => ({ id: props.id }),
+    },
+    reviews: { load: ListReviews, args: (_model, props) => ({ id: props.id }) },
   },
-  init: ($) => ({ ...$.empty, image: 0, moreReviews: false }),
+  init: () => ({ image: 0 }),
   update: (model, message, $) =>
     Message.match(message, {
       ImageChosen: ({ index }) => ({ ...model, image: index }),
       BackPressed: () => $.run(Router.Back.make().pipe(done)),
       SharePressed: ({ title }) =>
         $.run(ShareProduct.make({ title }).pipe(done)),
-      BottomReached: () => (model.moreReviews ? $.loadMore("reviews") : model),
+      // Only when there are more reviews that nothing is loading yet
+      BottomReached: () =>
+        Option.exists(
+          AsyncResult.value($.loaded.reviews),
+          (list) => list.more._tag === "Available",
+        )
+          ? $.loadMore("reviews")
+          : model,
       Done: () => model,
-      ProductChanged: ({ snapshot }) => ({ ...model, product: snapshot }),
-      KnownChanged: ({ snapshot }) => ({ ...model, known: snapshot }),
-      StatsChanged: ({ snapshot }) => ({ ...model, stats: snapshot }),
-      ReviewsChanged: ({ more, snapshot }) => ({
-        ...model,
-        reviews: snapshot,
-        moreReviews: more,
-      }),
     }),
-  subscriptions: (_model, _props, $) => [
-    $.watch({
-      product: (snapshot) => Message.make({ _tag: "ProductChanged", snapshot }),
-      known: (snapshot) => Message.make({ _tag: "KnownChanged", snapshot }),
-      stats: (snapshot) => Message.make({ _tag: "StatsChanged", snapshot }),
-      reviews: (snapshot, loaded) =>
-        Message.make({
-          _tag: "ReviewsChanged",
-          snapshot,
-          more: Option.exists(
-            AsyncResult.value(loaded),
-            (list) => list.more._tag === "Available",
-          ),
-        }),
-    }),
-    bottomReached(Message.make({ _tag: "BottomReached" })),
-  ],
+  subscriptions: () => [bottomReached(Message.make({ _tag: "BottomReached" }))],
   view: (model, h) => {
     const fullInfo: Option.Option<ProductPriceInfo> = AsyncResult.value(
       h.loaded.product,

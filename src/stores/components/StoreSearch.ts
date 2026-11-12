@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Command, Component } from "effect/ui"
 import {
   SessionLocation,
@@ -13,17 +13,12 @@ import { Session } from "../../rpc/services/Session.ts"
 import { AllStores } from "../loaders/AllStores.ts"
 import { CurrentStore } from "../loaders/CurrentStore.ts"
 
-const CurrentSnapshot = Loader.Snapshot(CurrentStore, "current")
-const AllSnapshot = Loader.Snapshot(AllStores, "all")
-
 export const StoreSearchMessage = Schema.TaggedUnion({
   SearchTyped: { text: Schema.String },
   StoreChosen: { location: SessionLocation },
   Closed: {},
   Retried: {},
   Done: {},
-  CurrentChanged: { snapshot: CurrentSnapshot },
-  AllChanged: { snapshot: AllSnapshot },
 })
 const Message = StoreSearchMessage
 
@@ -63,16 +58,14 @@ export const StoreSearchNoDeps = Component.make({
   name: "StoreSearch",
   model: Schema.Struct({
     search: Schema.String,
-    current: CurrentSnapshot,
-    all: AllSnapshot,
   }),
   message: Message,
   events: StoreSearchEvents,
   loaders: {
-    current: () => ({}),
-    all: () => ({}),
+    current: { load: CurrentStore, args: () => ({}) },
+    all: { load: AllStores, args: () => ({}) },
   },
-  init: ($) => ({ ...$.empty, search: "" }),
+  init: () => ({ search: "" }),
   update: (model, message, $) =>
     Message.match(message, {
       SearchTyped: ({ text }) => ({ ...model, search: text }),
@@ -89,15 +82,7 @@ export const StoreSearchNoDeps = Component.make({
         ),
       Retried: () => $.run(RetryAllStores.make().pipe(done)),
       Done: () => model,
-      CurrentChanged: ({ snapshot }) => ({ ...model, current: snapshot }),
-      AllChanged: ({ snapshot }) => ({ ...model, all: snapshot }),
     }),
-  subscriptions: (_model, _props, $) => [
-    $.watch({
-      current: (snapshot) => Message.make({ _tag: "CurrentChanged", snapshot }),
-      all: (snapshot) => Message.make({ _tag: "AllChanged", snapshot }),
-    }),
-  ],
   view: (model, h) => {
     const current = Option.flatten(AsyncResult.value(h.loaded.current))
     const isShown = (code: string) =>

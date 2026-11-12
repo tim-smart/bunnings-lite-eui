@@ -1,6 +1,6 @@
 import * as Clipboard from "@effect/platform-browser/Clipboard"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
-import { AsyncResult, Loader } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { Command, Component, Subscription } from "effect/ui"
 import { buttonClass, inputClass } from "../../design/classes.ts"
 import { drawer, drawerFooter, drawerHeader } from "../../design/drawer.ts"
@@ -11,8 +11,6 @@ import { Invites } from "../services/Invites.ts"
 import { SyncRemote } from "../services/SyncRemote.ts"
 import { SyncSettings } from "../services/SyncSettings.ts"
 
-const SettingsSnapshot = Loader.Snapshot(GetSyncSettings, "settings")
-
 export const SyncSettingsPanelMessage = Schema.TaggedUnion({
   Closed: {},
   RemoteUrlTyped: { text: Schema.String },
@@ -20,7 +18,6 @@ export const SyncSettingsPanelMessage = Schema.TaggedUnion({
   Copied: { copied: Schema.Boolean },
   CopiedExpired: {},
   Done: {},
-  SettingsChanged: { snapshot: SettingsSnapshot },
 })
 const Message = SyncSettingsPanelMessage
 
@@ -85,7 +82,6 @@ const remoteUrlOf = (text: string): string | null | undefined => {
 export const SyncSettingsPanelNoDeps = Component.make({
   name: "SyncSettingsPanel",
   model: Schema.Struct({
-    settings: SettingsSnapshot,
     /** What was typed into the remote field. It shows the saved one until then. */
     remoteUrl: Schema.NullOr(Schema.String),
     /** Whether an invite link was just copied. */
@@ -94,9 +90,9 @@ export const SyncSettingsPanelNoDeps = Component.make({
   message: Message,
   events: SyncSettingsPanelEvents,
   loaders: {
-    settings: () => ({}),
+    settings: { load: GetSyncSettings, args: () => ({}) },
   },
-  init: ($) => ({ ...$.empty, remoteUrl: null, copied: false }),
+  init: () => ({ remoteUrl: null, copied: false }),
   update: (model, message, $) =>
     Message.match(message, {
       Closed: () =>
@@ -118,13 +114,8 @@ export const SyncSettingsPanelNoDeps = Component.make({
       Copied: ({ copied }) => ({ ...model, copied }),
       CopiedExpired: () => ({ ...model, copied: false }),
       Done: () => model,
-      SettingsChanged: ({ snapshot }) => ({ ...model, settings: snapshot }),
     }),
-  subscriptions: (model, _props, $) => [
-    $.watch({
-      settings: (snapshot) =>
-        Message.make({ _tag: "SettingsChanged", snapshot }),
-    }),
+  subscriptions: (model) => [
     ...(model.copied
       ? [
           Subscription.make(
