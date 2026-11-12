@@ -2,7 +2,6 @@ import { Schema } from "effect"
 import { Command, Component, Router } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { inputClass, labelClass } from "../../design/classes.ts"
-import { cn } from "../../lib/utils.ts"
 import { AppRoute, SearchRoute } from "../../routes.ts"
 import { FacetRange, ratingFacet } from "../domain/Search.ts"
 
@@ -262,7 +261,7 @@ export const Filters = Component.make({
         .attr("aria-label", end === "min" ? "Minimum rating" : "Maximum rating")
         // With both thumbs at the top end, the lower one has to be on top or
         // neither could move
-        .class(cn(end === "min" && low === ratingFacet.end && "z-10"))
+        .class(end === "min" && low === ratingFacet.end && "z-10")
         .value(String(value))
         .onInput(({ value }) =>
           Message.make({ _tag: "RatingMoved", end, value: Number(value) }),

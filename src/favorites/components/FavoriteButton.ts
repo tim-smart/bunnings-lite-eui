@@ -1,10 +1,10 @@
 import { Effect, Layer, Schema } from "effect"
 import { AsyncResult, Loader } from "effect/reactivity"
 import { Command, Component } from "effect/ui"
+import { Html } from "effect/ui/html"
 import { ProductBaseInfo } from "../../../server/src/domain/Bunnings.ts"
 import { buttonClass } from "../../design/classes.ts"
 import { icon } from "../../design/icons.ts"
-import { cn } from "../../lib/utils.ts"
 import { KnownProducts } from "../../product/services/KnownProducts.ts"
 import { ListFavorites } from "../loaders/ListFavorites.ts"
 import { Favorites } from "../services/Favorites.ts"
@@ -81,7 +81,7 @@ export const FavoriteButtonNoDeps = Component.make({
         .onClick(toggled)
         .children(
           icon(h, "star", {
-            class: cn(
+            class: Html.classNames(
               "size-5 text-accent",
               isFavorite ? "fill-accent" : "fill-none",
             ),
@@ -100,7 +100,7 @@ export const FavoriteButtonNoDeps = Component.make({
       .onClick(toggled)
       .children(
         icon(h, "star", {
-          class: cn(
+          class: Html.classNames(
             "text-accent transition-transform",
             isFavorite ? "fill-accent scale-110" : "fill-none",
           ),

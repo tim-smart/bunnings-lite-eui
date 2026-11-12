@@ -1,5 +1,4 @@
 import type { View } from "effect/ui"
-import { cn } from "../lib/utils.ts"
 import type { H } from "./h.ts"
 
 /**
@@ -46,10 +45,8 @@ export const drawer = <Msg, const C extends ReadonlyArray<View.Input<Msg>>>(
         .onClick(options.onClose),
       h.div
         .class(
-          cn(
-            "absolute inset-x-0 bottom-0 mx-auto flex max-h-[80vh] w-full max-w-md flex-col rounded-t-lg border-t bg-background animate-in slide-in-from-bottom duration-300",
-            options.class,
-          ),
+          "absolute inset-x-0 bottom-0 mx-auto flex max-h-[80vh] w-full max-w-md flex-col rounded-t-lg border-t bg-background animate-in slide-in-from-bottom duration-300",
+          options.class,
         )
         .children(
           h.div

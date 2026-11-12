@@ -14,7 +14,7 @@ import { richText } from "../../design/richText.ts"
 import { skeleton } from "../../design/skeleton.ts"
 import { starRating } from "../../design/starRating.ts"
 import { FavoriteButton } from "../../favorites/components/FavoriteButton.ts"
-import { cn, formatPrice } from "../../lib/utils.ts"
+import { formatPrice } from "../../lib/utils.ts"
 import { FulfillmentBadge } from "../../product/components/FulfillmentBadge.ts"
 import { parseRichText } from "../../product/domain/RichText.ts"
 import { GetKnownProduct } from "../../product/loaders/GetKnownProduct.ts"
@@ -217,7 +217,7 @@ export const ProductPageNoDeps = Component.make({
                     .children(
                       [0, 1, 2, 3, 4, 5].map((i) =>
                         h.div
-                          .class(cn(specificationRow, "py-3"))
+                          .class(specificationRow, "py-3")
                           .key(String(i))
                           .children(
                             skeleton(h, "h-3.5 w-3/4"),
@@ -232,10 +232,8 @@ export const ProductPageNoDeps = Component.make({
                       specifications.map((spec, i) =>
                         h.div
                           .class(
-                            cn(
-                              specificationRow,
-                              "py-2.5 text-sm leading-snug sm:text-[15px]",
-                            ),
+                            specificationRow,
+                            "py-2.5 text-sm leading-snug sm:text-[15px]",
                           )
                           .key(String(i))
                           .children(
@@ -277,10 +275,10 @@ export const ProductPageNoDeps = Component.make({
               .attr("aria-label", `Show image ${i + 1}`)
               .attr("aria-current", i === model.image ? "true" : undefined)
               .class(
-                cn(
-                  "aspect-square cursor-pointer rounded-lg bg-image-well p-2 text-image-well-foreground ring-inset transition-shadow hover:ring-2 hover:ring-brand/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
-                  i === model.image && "ring-2 ring-brand hover:ring-brand",
-                ),
+                "aspect-square cursor-pointer rounded-lg bg-image-well p-2 text-image-well-foreground ring-inset transition-shadow hover:ring-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                i === model.image
+                  ? "ring-2 ring-brand hover:ring-brand"
+                  : "hover:ring-brand/30",
               )
               .onClick(Message.make({ _tag: "ImageChosen", index: i }))
               .key(String(i))

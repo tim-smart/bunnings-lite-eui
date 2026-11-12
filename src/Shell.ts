@@ -10,7 +10,6 @@ import { icon } from "./design/icons.ts"
 import { ListFavoritesRefresh } from "./favorites/loaders/ListFavorites.ts"
 import { Favorites } from "./favorites/services/Favorites.ts"
 import { FavoritesRepo } from "./favorites/services/FavoritesRepo.ts"
-import { cn } from "./lib/utils.ts"
 import { ProductPage } from "./pages/product/ProductPage.ts"
 import { SearchPage } from "./pages/SearchPage.ts"
 import { KnownProducts } from "./product/services/KnownProducts.ts"
@@ -265,22 +264,18 @@ export const ShellNoDeps = Component.make({
       h.header.class("px-3 sm:px-6 text-white").children(
         h.div
           .class(
-            cn(
-              "container mx-auto max-w-7xl grid grid-cols-[1fr_auto_1fr] items-center gap-x-6",
-              minimize
-                ? "py-3 gap-y-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:py-4"
-                : "pt-4 pb-12 gap-y-10 md:pb-16 md:gap-y-12",
-            ),
+            "container mx-auto max-w-7xl grid grid-cols-[1fr_auto_1fr] items-center gap-x-6",
+            minimize
+              ? "py-3 gap-y-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:py-4"
+              : "pt-4 pb-12 gap-y-10 md:pb-16 md:gap-y-12",
           )
           .children(
             h.div
               .class(
-                cn(
-                  "row-start-1",
-                  minimize
-                    ? "col-start-1 justify-self-start"
-                    : "col-start-2 justify-self-center pt-8 md:pt-12",
-                ),
+                "row-start-1",
+                minimize
+                  ? "col-start-1 justify-self-start"
+                  : "col-start-2 justify-self-center pt-8 md:pt-12",
               )
               .children(
                 h.a
@@ -295,12 +290,10 @@ export const ShellNoDeps = Component.make({
                       .attr("width", "150")
                       .attr("height", "50")
                       .class(
-                        cn(
-                          "block w-auto transition-[height,opacity] hover:opacity-90 active:opacity-80",
-                          minimize
-                            ? "h-[30px] md:h-[34px]"
-                            : "h-[50px] md:h-[60px]",
-                        ),
+                        "block w-auto transition-[height,opacity] hover:opacity-90 active:opacity-80",
+                        minimize
+                          ? "h-[30px] md:h-[34px]"
+                          : "h-[50px] md:h-[60px]",
                       ),
                   ),
               ),
@@ -319,22 +312,18 @@ export const ShellNoDeps = Component.make({
               ),
             h.div
               .class(
-                cn(
-                  "col-span-3 row-start-2",
-                  minimize && "md:col-span-1 md:col-start-2 md:row-start-1",
-                ),
+                "col-span-3 row-start-2",
+                minimize && "md:col-span-1 md:col-start-2 md:row-start-1",
               )
               .children(
                 h.div
                   .class(
-                    cn(
-                      "relative w-full mx-auto",
-                      minimize ? "max-w-2xl" : "max-w-xl",
-                    ),
+                    "relative w-full mx-auto",
+                    minimize ? "max-w-2xl" : "max-w-xl",
                   )
                   .children(
                     icon(h, loading ? "loaderCircle" : "search", {
-                      class: cn(
+                      class: Html.classNames(
                         "pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-primary",
                         loading && "animate-spin",
                       ),
@@ -351,7 +340,7 @@ export const ShellNoDeps = Component.make({
                           .attr("autofocus", "")
                           .class(
                             inputClass(
-                              cn(
+                              Html.classNames(
                                 "w-full pl-12 pr-4 border-2 border-card rounded-lg bg-card text-base md:text-base hover:border-card focus-visible:border-secondary focus-visible:ring-3 focus-visible:ring-secondary/20",
                                 minimize
                                   ? "h-11 md:h-12"

@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { Html } from "effect/ui/html"
 import type { H } from "./h"
 
 type Shape = readonly [tag: string, attrs: Readonly<Record<string, string>>]
@@ -118,7 +118,7 @@ export const icon = <Msg>(
     .attr("stroke-linecap", "round")
     .attr("stroke-linejoin", "round")
     .attr("aria-hidden", "true")
-    .attr("class", cn("lucide", options?.class))
+    .attr("class", Html.classNames("lucide", options?.class))
     .children(
       (shapes[name] as ReadonlyArray<Shape>).map(([tag, attrs]) =>
         Object.entries(attrs).reduce(

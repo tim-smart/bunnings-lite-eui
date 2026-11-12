@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { Html } from "effect/ui/html"
 import type { H } from "./h"
 import { icon } from "./icons"
 
@@ -11,7 +11,10 @@ export const starRating = <Msg>(
   const size = options.size === "sm" ? "h-4 w-4" : "h-5 w-5"
   const empty = () =>
     icon(h, "star", {
-      class: cn(size, "transition-colors fill-none text-foreground/25"),
+      class: Html.classNames(
+        size,
+        "transition-colors fill-none text-foreground/25",
+      ),
     })
   return h.div
     .class("flex items-center")
@@ -21,7 +24,7 @@ export const starRating = <Msg>(
         const half = rating % 1 !== 0 && index + 1 === Math.ceil(rating)
         const star = icon(h, half ? "starHalf" : "star", {
           key: half ? undefined : String(index),
-          class: cn(
+          class: Html.classNames(
             half ? "absolute top-0 left-0" : "relative",
             size,
             "transition-colors",

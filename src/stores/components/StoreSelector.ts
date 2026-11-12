@@ -7,7 +7,6 @@ import {
   type Store,
 } from "../../../server/src/domain/Bunnings.ts"
 import { icon } from "../../design/icons.ts"
-import { cn } from "../../lib/utils.ts"
 import { SessionTag } from "../../rpc/domain/SessionTag.ts"
 import { Session } from "../../rpc/services/Session.ts"
 import { CurrentStore } from "../loaders/CurrentStore.ts"
@@ -177,10 +176,8 @@ export const StoreSelectorNoDeps = Component.make({
         h.select
           .attr("aria-label", "Your store")
           .class(
-            cn(
-              "h-11 w-full cursor-pointer appearance-none rounded-md border border-input bg-card py-2 pr-9 pl-10 text-sm font-medium text-foreground outline-none transition-[color,box-shadow] hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15",
-              Option.isNone(shown) && "text-muted-foreground",
-            ),
+            "h-11 w-full cursor-pointer appearance-none rounded-md border border-input bg-card py-2 pr-9 pl-10 text-sm font-medium outline-none transition-[color,box-shadow] hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15",
+            Option.isNone(shown) ? "text-muted-foreground" : "text-foreground",
           )
           .onFocus(Message.make({ _tag: "Reached" }))
           .onChange(({ value }) => {
