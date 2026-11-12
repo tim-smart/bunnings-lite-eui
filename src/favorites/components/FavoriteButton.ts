@@ -71,25 +71,22 @@ export const FavoriteButtonNoDeps = Component.make({
     )
     const toggled = FavoriteButtonMessage.make({ _tag: "Toggled" })
     if (variant === "icon") {
-      return (
-        h
-          .button(
-            icon(h, "star", {
-              class: cn(
-                "size-5 text-accent",
-                isFavorite ? "fill-accent" : "fill-none",
-              ),
-            }),
-          )
-          .attr("type", "button")
-          .attr("aria-label", "Toggle favorite")
-          .attr("aria-pressed", String(isFavorite))
-          .class(
-            "grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-card/90 transition-[background-color,transform] hover:bg-muted active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-          )
-          // On a product card the star is inside the card's link
-          .onClick(toggled, { preventDefault: true })
-      )
+      return h
+        .button(
+          icon(h, "star", {
+            class: cn(
+              "size-5 text-accent",
+              isFavorite ? "fill-accent" : "fill-none",
+            ),
+          }),
+        )
+        .attr("type", "button")
+        .attr("aria-label", "Toggle favorite")
+        .attr("aria-pressed", String(isFavorite))
+        .class(
+          "grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-card/90 transition-[background-color,transform] hover:bg-muted active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        )
+        .onClick(toggled)
     }
     return h
       .button(
