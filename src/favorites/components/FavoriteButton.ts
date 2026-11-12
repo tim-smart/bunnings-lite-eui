@@ -1,0 +1,119 @@
+import { Effect, Layer, Schema } from "effect"
+import { AsyncResult, Loader } from "effect/reactivity"
+import { Command, Component } from "effect/ui"
+import { ProductBaseInfo } from "../../../server/src/domain/Bunnings.ts"
+import { buttonClass } from "../../design/classes.ts"
+import { icon } from "../../design/icons.ts"
+import { cn } from "../../lib/utils.ts"
+import { KnownProducts } from "../../product/services/KnownProducts.ts"
+import { ListFavorites } from "../loaders/ListFavorites.ts"
+import { Favorites } from "../services/Favorites.ts"
+
+const FavoritesSnapshot = Loader.Snapshot(ListFavorites, "favorites")
+
+export const FavoriteButtonMessage = Schema.TaggedUnion({
+  Toggled: {},
+  Saved: {},
+  FavoritesChanged: { snapshot: FavoritesSnapshot },
+})
+
+/** Adds a product to the favourites, or removes it if it is one already. */
+export class ToggleFavorite extends Command.Service<ToggleFavorite>()(
+  "favorites/ToggleFavorite",
+  {
+    args: { product: ProductBaseInfo },
+    // The favourites refetch themselves after every change
+    invalidates: () => [],
+  },
+  Effect.gen(function* () {
+    const favorites = yield* Favorites
+    return ({ product }) => favorites.toggle(product)
+  }),
+) {}
+
+/**
+ * The star that makes a product a favourite. `icon` is the round one on a
+ * product card, `button` the labelled one on a product page.
+ */
+export const FavoriteButtonNoDeps = Component.make({
+  name: "FavoriteButton",
+  props: Schema.Struct({
+    product: ProductBaseInfo,
+    variant: Schema.Literals(["icon", "button"]),
+  }),
+  model: Schema.Struct({ favorites: FavoritesSnapshot }),
+  message: FavoriteButtonMessage,
+  loaders: {
+    favorites: () => ({}),
+  },
+  init: ($) => $.empty,
+  update: (model, message, $) =>
+    FavoriteButtonMessage.match(message, {
+      Toggled: () =>
+        $.run(
+          ToggleFavorite.make({ product: $.props.product }).pipe(
+            Command.map(() => FavoriteButtonMessage.make({ _tag: "Saved" })),
+          ),
+        ),
+      Saved: () => model,
+      FavoritesChanged: ({ snapshot }) => ({ favorites: snapshot }),
+    }),
+  subscriptions: (_model, _props, $) => [
+    $.watch({
+      favorites: (snapshot) =>
+        FavoriteButtonMessage.make({ _tag: "FavoritesChanged", snapshot }),
+    }),
+  ],
+  view: (_model, h) => {
+    const { product, variant } = h.props
+    const isFavorite = AsyncResult.getOrElse(h.loaded.favorites, () => []).some(
+      (favorite) => favorite.id === product.id,
+    )
+    const toggled = FavoriteButtonMessage.make({ _tag: "Toggled" })
+    if (variant === "icon") {
+      return h
+        .button(
+          icon(h, "star", {
+            class: cn(
+              "size-5 text-accent",
+              isFavorite ? "fill-accent" : "fill-none",
+            ),
+          }),
+        )
+        .attr("type", "button")
+        .attr("aria-label", "Toggle favorite")
+        .attr("aria-pressed", String(isFavorite))
+        .class(
+          "grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-card/90 transition-[background-color,transform] hover:bg-muted active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        )
+        .onClick(toggled)
+    }
+    return h
+      .button(
+        icon(h, "star", {
+          class: cn(
+            "text-accent transition-transform",
+            isFavorite ? "fill-accent scale-110" : "fill-none",
+          ),
+        }),
+        isFavorite ? "Unfavorite" : "Favorite",
+      )
+      .attr("type", "button")
+      .class(
+        buttonClass({
+          variant: "outline",
+          size: "lg",
+          class: "cursor-pointer",
+        }),
+      )
+      .onClick(toggled)
+  },
+})
+
+export const FavoriteButton = FavoriteButtonNoDeps.pipe(
+  Component.provide(
+    Layer.mergeAll(ToggleFavorite.layer, ListFavorites.layer).pipe(
+      Layer.provide([Favorites.layer, KnownProducts.layer]),
+    ),
+  ),
+)
