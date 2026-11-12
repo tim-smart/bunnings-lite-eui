@@ -1,0 +1,81 @@
+import { Layer, Option, Schema } from "effect"
+import { Session } from "../../rpc/services/Session.ts"
+import { AsyncResult, Loader } from "effect/reactivity"
+import { Component } from "effect/ui"
+import { badgeClass } from "../../design/classes.ts"
+import { icon } from "../../design/icons.ts"
+import { GetFulfillment } from "../loaders/GetFulfillment.ts"
+
+const FulfillmentSnapshot = Loader.Snapshot(GetFulfillment, "fulfillment")
+
+export const FulfillmentBadgeMessage = Schema.TaggedUnion({
+  FulfillmentChanged: { snapshot: FulfillmentSnapshot },
+})
+
+/**
+ * Where a product is in the chosen store, or that the store is out of it. It
+ * shows nothing until that is known, and its wrapper hides while empty.
+ */
+export const FulfillmentBadgeNoDeps = Component.make({
+  name: "FulfillmentBadge",
+  props: Schema.Struct({
+    id: Schema.String,
+    /** Also say so when the product is in stock with no known aisle. */
+    showAvailable: Schema.Boolean,
+    /** Classes for the wrapper, which places the badge. */
+    class: Schema.String,
+  }),
+  model: Schema.Struct({ fulfillment: FulfillmentSnapshot }),
+  message: FulfillmentBadgeMessage,
+  loaders: {
+    fulfillment: (_model, props) => ({ id: props.id }),
+  },
+  init: ($) => $.empty,
+  update: (_model, message) => ({ fulfillment: message.snapshot }),
+  subscriptions: (_model, _props, $) => [
+    $.watch({
+      fulfillment: (snapshot) =>
+        FulfillmentBadgeMessage.make({ _tag: "FulfillmentChanged", snapshot }),
+    }),
+  ],
+  view: (_model, h) => {
+    const fulfillment = Option.flatten(AsyncResult.value(h.loaded.fulfillment))
+    const badge = Option.match(fulfillment, {
+      onNone: () => undefined,
+      onSome: (info) => {
+        if (!info.isAvailable) {
+          return h
+            .span("Out of stock")
+            .class(
+              badgeClass(
+                "h-7 rounded-full border-0 bg-orange-100 px-2.5 text-orange-800 dark:bg-orange-400/15 dark:text-orange-300",
+              ),
+            )
+        }
+        if (Option.isSome(info.location)) {
+          const { aisle, bay } = info.location.value
+          return h
+            .span(icon(h, "mapPin"), `Aisle ${aisle}/${bay}`)
+            .class(
+              badgeClass(
+                "h-7 rounded-full border-0 bg-primary/10 px-2.5 text-primary tabular-nums",
+              ),
+            )
+        }
+        if (!h.props.showAvailable) return undefined
+        return h
+          .span("Available")
+          .class(
+            badgeClass(
+              "h-7 rounded-full border-0 bg-green-100 px-2.5 text-green-800 dark:bg-green-400/15 dark:text-green-300",
+            ),
+          )
+      },
+    })
+    return h.div(badge).class(h.props.class)
+  },
+})
+
+export const FulfillmentBadge = FulfillmentBadgeNoDeps.pipe(
+  Component.provide(GetFulfillment.layer.pipe(Layer.provide(Session.layer))),
+)
