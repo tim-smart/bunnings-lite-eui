@@ -214,3 +214,50 @@ test("search: a search right after clearing to home starts with the skeleton", a
   await expect(loading).toBeHidden()
   await expect(page.getByPlaceholder("$0")).toBeVisible()
 })
+
+test("search: typing from home waits for the typing to stop", async ({
+  page,
+}) => {
+  const searches = await mockRpc(page)
+  await page.goto("/")
+  await expect(page.getByRole("heading", { name: "Your store" })).toBeVisible()
+
+  await page
+    .getByPlaceholder("Search for products...")
+    .pressSequentially("hammer", { delay: 40 })
+  await expect(
+    page.getByText("hammer / all prices", { exact: true }),
+  ).toBeVisible({ timeout: 10_000 })
+  expect(searches.map((s) => s.query)).toEqual(["hammer"])
+})
+
+test("search: clearing and searching again before a render starts over", async ({
+  page,
+}) => {
+  let release!: () => void
+  const drillHeld = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await mockRpc(page, (query) => (query === "drill" ? drillHeld : undefined))
+  await page.goto("/?query=hammer")
+  const hammer = page.getByText("hammer / all prices", { exact: true })
+  const loading = page.getByRole("status", { name: "Loading results" })
+  await expect(hammer).toBeVisible({ timeout: 10_000 })
+
+  // Both inputs in one task, so the cleared search is never rendered
+  await page
+    .getByPlaceholder("Search for products...")
+    .evaluate((input: HTMLInputElement) => {
+      for (const value of ["", "drill"]) {
+        input.value = value
+        input.dispatchEvent(new Event("input", { bubbles: true }))
+      }
+    })
+  await expect(loading).toBeVisible()
+  await expect(hammer).toBeHidden()
+
+  release()
+  await expect(
+    page.getByText("drill / all prices", { exact: true }),
+  ).toBeVisible({ timeout: 10_000 })
+})

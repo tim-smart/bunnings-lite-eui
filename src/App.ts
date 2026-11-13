@@ -3,6 +3,7 @@ import { Command, Component, Head, Router } from "effect/ui"
 import { Reload } from "./browser/services/Reload.ts"
 import { buttonClass } from "./design/classes.ts"
 import { AppRoute } from "./routes.ts"
+import { searchCleared } from "./search/domain/Search.ts"
 import { Shell } from "./Shell.ts"
 import { JoinFailed, JoinProgress } from "./sync/domain/Invite.ts"
 import { PendingJoin } from "./sync/services/PendingJoin.ts"
@@ -42,12 +43,19 @@ export const AppNoDeps = Component.define({
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({
     route: AppRoute,
+    /**
+     * How many times the search has been cleared back to the home page. The
+     * search page starts over each time, without the last search's results.
+     * It is counted here because every route change passes through `update`,
+     * including a clear that is never rendered.
+     */
+    searchesCleared: Schema.Number,
     join: Schema.Literals(["Checking", "Blocked", "Failed", "Ready"]),
   }),
   message: AppMessage,
 }).make({
   init: ($) =>
-    $.set({ route: $.props.route, join: "Checking" }).run(
+    $.set({ route: $.props.route, searchesCleared: 0, join: "Checking" }).run(
       FinishJoin.make().pipe(
         Command.match({
           onSuccess: (progress) =>
@@ -58,7 +66,12 @@ export const AppNoDeps = Component.define({
     ),
   update: (model, message, $) =>
     AppMessage.match(message, {
-      RouteChanged: ({ route }) => ({ ...model, route }),
+      RouteChanged: ({ route }) => ({
+        ...model,
+        route,
+        searchesCleared:
+          model.searchesCleared + (searchCleared(model.route, route) ? 1 : 0),
+      }),
       JoinProgressed: ({ progress }) => ({
         ...model,
         join:
@@ -89,7 +102,10 @@ export const AppNoDeps = Component.define({
       case "Ready":
         return h.child(Shell, {
           key: "shell",
-          props: { route: model.route },
+          props: {
+            route: model.route,
+            searchesCleared: model.searchesCleared,
+          },
         })
       // Checking takes a moment, and says nothing unless it has to wait
       case "Checking":
