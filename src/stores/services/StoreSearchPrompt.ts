@@ -38,10 +38,10 @@ export class StoreSearchPrompt extends Context.Service<
         Option.none<Deferred.Deferred<Answer>>(),
       )
       return {
-        asking: Stream.concat(
-          Stream.fromEffect(SubscriptionRef.get(waiting)),
-          SubscriptionRef.changes(waiting),
-        ).pipe(Stream.map(Option.isSome), Stream.changes),
+        asking: SubscriptionRef.changes(waiting).pipe(
+          Stream.map(Option.isSome),
+          Stream.changes,
+        ),
         ask: Effect.acquireUseRelease(
           Effect.gen(function* () {
             const question = yield* Deferred.make<Answer>()

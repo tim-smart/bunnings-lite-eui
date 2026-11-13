@@ -42,7 +42,7 @@ export const FavoritesListNoDeps = Component.define({
       Cleared: () =>
         $.run(
           ClearFavorites.make().pipe(
-            Command.map(() => Message.make({ _tag: "Done" })),
+            Command.as(Message.make({ _tag: "Done" })),
           ),
         ),
       Done: () => model,

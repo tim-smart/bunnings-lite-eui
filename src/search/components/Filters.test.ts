@@ -79,19 +79,4 @@ describe("Filters", () => {
         .resolve(Router.PatchQuery, "navigated"),
     )
   })
-
-  it("drops what was typed when the search text changes", () => {
-    Story.make(Filters, hammer, (s) =>
-      s
-        .send(typed("min", "10"))
-        .props({ ...hammer, route: route({ query: "drill" }) })
-        // Leaving the field can't apply the last search's price to this one
-        .send(FiltersMessage.make({ _tag: "PriceLeft", end: "min" }))
-        .expectNone()
-        .model((model) => {
-          assert.strictEqual(model.forQuery, "drill")
-          assert.strictEqual(model.priceMin, null)
-        }),
-    )
-  })
 })

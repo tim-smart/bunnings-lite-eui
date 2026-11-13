@@ -35,9 +35,6 @@ export type AppRoute = typeof AppRoute.Type
 export const SearchRoute = AppRoute.subset(["Search"])
 export type SearchRoute = typeof SearchRoute.Type
 
-export const searchUrl = (query: string) =>
-  AppRoute.print(AppRoute.make({ _tag: "Search", query: { query } }))
-
 export const productUrl = (id: string, query: string) =>
   AppRoute.print(
     AppRoute.make({ _tag: "Product", params: { id }, query: { query } }),

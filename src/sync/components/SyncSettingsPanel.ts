@@ -65,7 +65,7 @@ export class CopyInvite extends Command.Service<CopyInvite>()(
   }),
 ) {}
 
-const done = Command.map(() => Message.make({ _tag: "Done" }))
+const done = Command.as(Message.make({ _tag: "Done" }))
 
 // The URL a remote field holds: none when blank, and nothing to save while
 // what is typed isn't a URL yet
@@ -117,16 +117,16 @@ export const SyncSettingsPanelNoDeps = Component.define({
       Done: () => model,
     }),
   subscriptions: (model) => [
-    ...(model.copied
-      ? [
-          Subscription.make(
-            "sync/copiedExpires",
-            Stream.fromEffect(Effect.sleep("2 seconds")).pipe(
-              Stream.map(() => Message.make({ _tag: "CopiedExpired" })),
-            ),
+    model.copied &&
+      Subscription.make(
+        "sync/copiedExpires",
+        Stream.fromEffect(
+          Effect.as(
+            Effect.sleep("2 seconds"),
+            Message.make({ _tag: "CopiedExpired" }),
           ),
-        ]
-      : []),
+        ),
+      ),
   ],
   view: (model, h) => {
     const labelClass = "flex flex-col gap-1.5 text-sm font-medium"

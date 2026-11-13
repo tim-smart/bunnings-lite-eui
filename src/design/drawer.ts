@@ -7,9 +7,9 @@ import type { H } from "./h.ts"
  * Render it only while it is open. Escape and a press on the backdrop both
  * send `onClose`.
  *
- * Focus starts on the control marked `autofocus`, or the first one. A sheet
- * that is removed has nowhere to hand focus back to, so whoever closes it
- * says where focus goes next.
+ * Focus starts on the control marked `autofocus`, or the first one. When
+ * the sheet is closed or removed, the host hands focus back to where it was
+ * before the sheet opened.
  *
  * `titleId` is the id `drawerHeader` gives the title, which names the dialog.
  */
@@ -17,7 +17,6 @@ export const drawer = <Msg, const C extends ReadonlyArray<View.Input<Msg>>>(
   h: H<Msg>,
   options: {
     readonly titleId: string
-    readonly described?: boolean
     readonly onClose: Msg
     readonly class?: string
   },
@@ -27,12 +26,7 @@ export const drawer = <Msg, const C extends ReadonlyArray<View.Input<Msg>>>(
     .modal(true)
     .onCancel(options.onClose)
     .attr("aria-labelledby", options.titleId)
-    .attr(
-      "aria-describedby",
-      options.described === false
-        ? undefined
-        : `${options.titleId}-description`,
-    )
+    .attr("aria-describedby", `${options.titleId}-description`)
     .class(
       "fixed inset-0 m-0 size-full max-h-none max-w-none overflow-hidden border-0 bg-transparent p-0 text-foreground backdrop:bg-transparent",
     )

@@ -34,7 +34,7 @@ export class RetryAllStores extends Command.Service<RetryAllStores>()(
   Effect.succeed(() => Effect.void),
 ) {}
 
-const done = Command.map(() => Message.make({ _tag: "Done" }))
+const done = Command.as(Message.make({ _tag: "Done" }))
 
 const matches = (store: Store, terms: ReadonlyArray<string>) => {
   const text = [

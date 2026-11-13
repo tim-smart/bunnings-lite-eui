@@ -46,9 +46,7 @@ export const InstallButtonNoDeps = Component.define({
       AvailabilityChanged: ({ available }) => ({ available }),
       Pressed: () =>
         $.run(
-          PromptInstall.make().pipe(
-            Command.map(() => Message.make({ _tag: "Done" })),
-          ),
+          PromptInstall.make().pipe(Command.as(Message.make({ _tag: "Done" }))),
         ),
       Done: () => model,
     }),

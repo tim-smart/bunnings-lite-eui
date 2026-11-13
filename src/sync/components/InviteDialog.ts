@@ -83,11 +83,7 @@ export const InviteDialogNoDeps = Component.define({
         ),
       Joined: () =>
         $.set({ ...model, invite: null })
-          .run(
-            JoinSync.make().pipe(
-              Command.map(() => Message.make({ _tag: "Done" })),
-            ),
-          )
+          .run(JoinSync.make().pipe(Command.as(Message.make({ _tag: "Done" }))))
           .emit(InviteDialogEvents.make({ _tag: "Closed" })),
       Done: () => model,
     }),
@@ -120,7 +116,7 @@ export const InviteDialogNoDeps = Component.define({
 
     const currentRemote = Option.flatMapNullishOr(
       AsyncResult.value(h.loaded.settings),
-      (settings) => settings.remoteHost,
+      ({ remoteUrl }) => (remoteUrl === null ? null : new URL(remoteUrl).host),
     )
     return drawer(
       h,

@@ -1,9 +1,13 @@
-import { Cause, Layer, Option, Schema } from "effect"
+import { Array as Arr, Cause, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Component } from "effect/ui"
+import { Component, Head } from "effect/ui"
 import type { ProductBaseInfo } from "../../server/src/domain/Bunnings.ts"
 import { InstallButton } from "../browser/components/InstallButton.ts"
-import { bottomReached, scrolledPast } from "../browser/subscriptions.ts"
+import {
+  bottomReached,
+  hasMore,
+  scrolledPast,
+} from "../browser/subscriptions.ts"
 import { buttonClass } from "../design/classes.ts"
 import { icon } from "../design/icons.ts"
 import { skeleton } from "../design/skeleton.ts"
@@ -14,7 +18,6 @@ import { SearchRoute } from "../routes.ts"
 import { Session } from "../rpc/services/Session.ts"
 import { Filters } from "../search/components/Filters.ts"
 import {
-  FacetRange,
   priceFacet,
   searchArgs,
   searchDebounce,
@@ -22,14 +25,7 @@ import {
 import { SearchProducts } from "../search/loaders/SearchProducts.ts"
 import { StoreSelector } from "../stores/components/StoreSelector.ts"
 
-// What the first page of a search says about its filters
-const Facets = Schema.Struct({
-  query: Schema.String,
-  price: Schema.NullOr(FacetRange),
-})
-
 export const SearchPageMessage = Schema.TaggedUnion({
-  ResultsChanged: { facets: Schema.NullOr(Facets) },
   BottomReached: {},
   Scrolled: { scrolled: Schema.Boolean },
   SearchWanted: {},
@@ -50,14 +46,7 @@ const gridClass =
 export const SearchPageNoDeps = Component.define({
   name: "SearchPage",
   props: Schema.Struct({ route: SearchRoute }),
-  model: Schema.Struct({
-    /**
-     * The filter ranges of the search, kept from its first results: applying
-     * a filter narrows what the server reports next.
-     */
-    facets: Schema.NullOr(Facets),
-    scrolled: Schema.Boolean,
-  }),
+  model: Schema.Struct({ scrolled: Schema.Boolean }),
   message: Message,
   events: SearchPageEvents,
   loaders: {
@@ -65,52 +54,42 @@ export const SearchPageNoDeps = Component.define({
       load: SearchProducts,
       debounce: searchDebounce,
       args: (_model, props) => searchArgs(props.route),
-      onChange: (result) =>
-        Message.make({
-          _tag: "ResultsChanged",
-          facets: Option.match(AsyncResult.value(result), {
-            onNone: () => null,
-            onSome: ({ pages }) =>
-              pages.length === 0
-                ? null
-                : { query: pages[0].query, price: priceFacet(pages[0]) },
-          }),
-        }),
+    },
+    // The search without its filters, whose first page gives the ranges the
+    // filters can take: applying a filter narrows what the server reports.
+    // With no filter applied it is the same read as `results`.
+    unfiltered: {
+      load: SearchProducts,
+      debounce: searchDebounce,
+      args: (_model, props) => {
+        const args = searchArgs(props.route)
+        return args && { ...args, price: null, rating: null }
+      },
     },
   },
 }).make({
-  init: () => ({ facets: null, scrolled: false }),
+  init: () => ({ scrolled: false }),
   update: (model, message, $) =>
     Message.match(message, {
-      ResultsChanged: ({ facets }) => ({
-        ...model,
-        facets:
-          facets !== null && facets.query !== model.facets?.query
-            ? facets
-            : model.facets,
-      }),
-      // Only when there is a next page that nothing is loading yet
       BottomReached: () =>
-        Option.exists(
-          AsyncResult.value($.loaded.results),
-          (list) => list.more._tag === "Available",
-        )
-          ? $.loadMore("results")
-          : model,
+        hasMore($.loaded.results) ? $.loadMore("results") : model,
       Scrolled: ({ scrolled }) => ({ ...model, scrolled }),
       SearchWanted: () =>
         $.set(model).emit(SearchPageEvents.make({ _tag: "SearchWanted" })),
     }),
-  subscriptions: (_model, props) => [
-    ...(searchArgs(props.route) === undefined
-      ? []
-      : [
-          bottomReached(Message.make({ _tag: "BottomReached" })),
-          scrolledPast(200, (scrolled) =>
-            Message.make({ _tag: "Scrolled", scrolled }),
-          ),
-        ]),
-  ],
+  subscriptions: (_model, props) => {
+    if (searchArgs(props.route) === undefined) return []
+    return [
+      bottomReached(Message.make({ _tag: "BottomReached" })),
+      scrolledPast(200, (scrolled) =>
+        Message.make({ _tag: "Scrolled", scrolled }),
+      ),
+    ]
+  },
+  head: (_model, props) => {
+    const query = props.route.query.query.trim()
+    return query === "" ? [] : [Head.title(query)]
+  },
   view: (model, h) => {
     const { route } = h.props
     const args = searchArgs(route)
@@ -225,12 +204,22 @@ export const SearchPageNoDeps = Component.define({
       onSuccess: ({ value }) => grid(value.items),
     })
 
+    // The last search's ranges stay up while the next one's load
+    const firstPage = Option.flatMap(
+      Option.orElse(
+        AsyncResult.value(h.loaded.unfiltered),
+        () => h.previous.unfiltered,
+      ),
+      ({ pages }) => Arr.head(pages),
+    )
+
     return h.div.key("results").children(
       h.div.class("h-4 sm:h-6"),
-      model.facets !== null &&
+      Option.isSome(firstPage) &&
         h.child(Filters, {
-          key: "filters",
-          props: { route, price: model.facets.price },
+          // Edits that weren't applied don't carry to another search
+          key: `filters:${route.query.query}`,
+          props: { route, price: priceFacet(firstPage.value) },
         }),
       h.div.class("h-3 sm:h-4"),
       results,

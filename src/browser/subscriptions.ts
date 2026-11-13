@@ -1,4 +1,5 @@
-import { Effect, Stream } from "effect"
+import { Effect, Option, Stream } from "effect"
+import { AsyncResult, type Loader } from "effect/reactivity"
 import { Subscription } from "effect/ui"
 import { Viewport } from "./services/Viewport.ts"
 
@@ -22,6 +23,18 @@ export const bottomReached = <Msg>(message: Msg) =>
         ),
       ),
     ),
+  )
+
+/** Whether a list loader has a next page that nothing is loading yet. */
+export const hasMore = (
+  list: AsyncResult.AsyncResult<
+    { readonly more: Loader.More<unknown> },
+    unknown
+  >,
+): boolean =>
+  Option.exists(
+    AsyncResult.value(list),
+    ({ more }) => more._tag === "Available",
   )
 
 /** Sends whether the page is scrolled more than `offset` pixels down. */

@@ -12,7 +12,6 @@ export class GetSyncSettings extends Loader.Service<GetSyncSettings>()(
       /** The identity as the text an invite carries. It holds a private key. */
       identity: Schema.String,
       remoteUrl: Schema.NullOr(Schema.String),
-      remoteHost: Schema.NullOr(Schema.String),
     }),
     error: Schema.Never,
     staleTime: "1 hour",
@@ -26,10 +25,6 @@ export class GetSyncSettings extends Loader.Service<GetSyncSettings>()(
         remoteUrl: Option.match(url, {
           onNone: () => null,
           onSome: (url) => url.toString(),
-        }),
-        remoteHost: Option.match(url, {
-          onNone: () => null,
-          onSome: (url) => url.host,
         }),
       }))
   }),

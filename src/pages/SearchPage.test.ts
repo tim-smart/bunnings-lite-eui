@@ -21,7 +21,6 @@ const route = (query: string): SearchRoute => ({
 })
 
 const page = (query: string): ResultsPage => ({
-  query,
   totalCount: 1,
   facets: [
     new Facet({
@@ -51,17 +50,31 @@ const page = (query: string): ResultsPage => ({
 
 const loading = HtmlQuery.role("status", { name: "Loading results" })
 
-const hasFilters = (view: View.Node<any, any>) =>
-  Story.children(view, Filters).length === 1
+const filters = (view: View.Node<any, any>) => Story.children(view, Filters)
 
 describe("SearchPage", () => {
   it("keeps the last results up while the search text changes", () => {
     Story.make(SearchPageNoDeps, { route: route("hammer") }, (s) =>
       s
         .loaded("results", [page("hammer")])
+        .loaded("unfiltered", [page("hammer")])
         .props({ route: route("drill") })
         .check((story) => assert.isUndefined(story.query(loading)))
-        .view((view) => assert.isTrue(hasFilters(view))),
+        .view((view) => assert.strictEqual(filters(view).length, 1)),
     )
+  })
+
+  it("starts the filters over for another search", () => {
+    const keys: Array<string> = []
+    Story.make(SearchPageNoDeps, { route: route("hammer") }, (s) =>
+      s
+        .loaded("results", [page("hammer")])
+        .loaded("unfiltered", [page("hammer")])
+        .view((view) => keys.push(filters(view)[0].key))
+        .props({ route: route("drill") })
+        .view((view) => keys.push(filters(view)[0].key)),
+    )
+    // A new key mounts new filters, without what was typed under the last one
+    assert.notStrictEqual(keys[0], keys[1])
   })
 })

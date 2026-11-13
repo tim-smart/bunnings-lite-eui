@@ -34,10 +34,7 @@ export class InstallPrompt extends Context.Service<
         ),
       )
       return {
-        available: Stream.concat(
-          Stream.fromEffect(SubscriptionRef.get(offer)),
-          SubscriptionRef.changes(offer),
-        ).pipe(
+        available: SubscriptionRef.changes(offer).pipe(
           Stream.map((event) => event !== undefined),
           Stream.changes,
         ),

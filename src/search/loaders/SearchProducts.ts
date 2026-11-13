@@ -4,7 +4,7 @@ import { KnownProducts } from "../../product/services/KnownProducts.ts"
 import { ApiError } from "../../rpc/domain/ApiError.ts"
 import { SessionTag } from "../../rpc/domain/SessionTag.ts"
 import { Session } from "../../rpc/services/Session.ts"
-import { ResultsPage, resultsPage, SearchArgs } from "../domain/Search.ts"
+import { ResultsPage, SearchArgs } from "../domain/Search.ts"
 
 /** The results of a search, a page at a time. The cursor is the offset. */
 export class SearchProducts extends Loader.ListService<SearchProducts>()(
@@ -40,7 +40,11 @@ export class SearchProducts extends Loader.ListService<SearchProducts>()(
         )
         .pipe(
           Effect.tap((data) => Effect.sync(() => known.remember(data.results))),
-          Effect.map((data) => resultsPage(query, data)),
+          Effect.map(({ facets, results, totalCount }): ResultsPage => ({
+            facets,
+            results,
+            totalCount,
+          })),
         )
   }),
 ) {}
