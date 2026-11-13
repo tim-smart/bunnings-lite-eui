@@ -14,9 +14,9 @@
   "license": "MIT",
   "packageManager": "pnpm@10.8.1",
   "devDependencies": {
-    "@effect/platform-node": "https://pkg.pr.new/@effect/platform-node@4d0cf03",
+    "@effect/platform-node": "https://pkg.pr.new/@effect/platform-node@8afea8b",
     "@effect/tsgo": "0.63.0",
-    "effect": "https://pkg.pr.new/effect@4d0cf03",
+    "effect": "https://pkg.pr.new/effect@8afea8b",
     "prettier": "^3.9.6",
     "tsup": "^8.5.1",
     "tsx": "^4.23.13",
