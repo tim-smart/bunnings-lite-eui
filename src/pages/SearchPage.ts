@@ -1,6 +1,6 @@
-import { Cause, Layer, Option, Schema, Stream } from "effect"
+import { Cause, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Component, Subscription } from "effect/ui"
+import { Component } from "effect/ui"
 import type { ProductBaseInfo } from "../../server/src/domain/Bunnings.ts"
 import { InstallButton } from "../browser/components/InstallButton.ts"
 import { bottomReached, scrolledPast } from "../browser/subscriptions.ts"
@@ -33,26 +33,8 @@ export const SearchPageMessage = Schema.TaggedUnion({
   BottomReached: {},
   Scrolled: { scrolled: Schema.Boolean },
   SearchWanted: {},
-  WentHome: {},
-  ResultsShown: {},
 })
 const Message = SearchPageMessage
-
-/** Sends `WentHome` each time the page shows home instead of results. */
-const wentHome = Subscription.make(
-  "search/wentHome",
-  Stream.make(Message.make({ _tag: "WentHome" })),
-)
-
-/**
- * Sends `ResultsShown` once the search after going home has results. A
- * cached search shows them at once and never changes the loader's slot, so
- * `onChange` can't tell.
- */
-const resultsShown = Subscription.make(
-  "search/resultsShown",
-  Stream.make(Message.make({ _tag: "ResultsShown" })),
-)
 
 /** Asks whoever holds the search box to bring it back into reach. */
 export const SearchPageEvents = Schema.TaggedUnion({ SearchWanted: {} })
@@ -75,12 +57,6 @@ export const SearchPageNoDeps = Component.define({
      */
     facets: Schema.NullOr(Facets),
     scrolled: Schema.Boolean,
-    /**
-     * Whether the results the loader still holds are from before the page
-     * last went home. A new search doesn't show them, or their filters,
-     * while it loads.
-     */
-    stale: Schema.Boolean,
   }),
   message: Message,
   events: SearchPageEvents,
@@ -103,7 +79,7 @@ export const SearchPageNoDeps = Component.define({
     },
   },
 }).make({
-  init: () => ({ facets: null, scrolled: false, stale: false }),
+  init: () => ({ facets: null, scrolled: false }),
   update: (model, message, $) =>
     Message.match(message, {
       ResultsChanged: ({ facets }) => ({
@@ -124,16 +100,11 @@ export const SearchPageNoDeps = Component.define({
       Scrolled: ({ scrolled }) => ({ ...model, scrolled }),
       SearchWanted: () =>
         $.set(model).emit(SearchPageEvents.make({ _tag: "SearchWanted" })),
-      WentHome: () => ({ ...model, stale: true }),
-      ResultsShown: () => ({ ...model, stale: false }),
     }),
-  subscriptions: (model, props, loaded) => [
+  subscriptions: (_model, props) => [
     ...(searchArgs(props.route) === undefined
-      ? [wentHome]
+      ? []
       : [
-          ...(model.stale && AsyncResult.isSuccess(loaded.results)
-            ? [resultsShown]
-            : []),
           bottomReached(Message.make({ _tag: "BottomReached" })),
           scrolledPast(200, (scrolled) =>
             Message.make({ _tag: "Scrolled", scrolled }),
@@ -230,10 +201,9 @@ export const SearchPageNoDeps = Component.define({
           )
 
     const results = AsyncResult.match(h.loaded.results, {
-      // The last results stay up while the next ones load, unless the page
-      // went home since
+      // The last results stay up while the next ones load
       onInitial: () =>
-        Option.match(model.stale ? Option.none() : h.previous.results, {
+        Option.match(h.previous.results, {
           onNone: skeletons,
           onSome: ({ items }) => grid(items),
         }),
@@ -255,16 +225,12 @@ export const SearchPageNoDeps = Component.define({
       onSuccess: ({ value }) => grid(value.items),
     })
 
-    // A search from before going home keeps its filters only for its own text
-    const facets =
-      model.stale && model.facets?.query !== args.query ? null : model.facets
-
     return h.div.key("results").children(
       h.div.class("h-4 sm:h-6"),
-      facets !== null &&
+      model.facets !== null &&
         h.child(Filters, {
           key: "filters",
-          props: { route, price: facets.price },
+          props: { route, price: model.facets.price },
         }),
       h.div.class("h-3 sm:h-4"),
       results,

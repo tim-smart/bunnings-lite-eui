@@ -39,6 +39,15 @@ export const searchArgs = (route: AppRoute): SearchArgs | undefined => {
   }
 }
 
+/**
+ * Whether going from one route to the next clears the search back to the
+ * home page.
+ */
+export const searchCleared = (from: AppRoute, to: AppRoute): boolean =>
+  to._tag === "Search" &&
+  searchArgs(from) !== undefined &&
+  searchArgs(to) === undefined
+
 /** How long the search waits for typing to stop. */
 export const searchDebounce = "150 millis"
 
