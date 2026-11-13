@@ -54,7 +54,7 @@ const matches = (store: Store, terms: ReadonlyArray<string>) => {
  * outside the page it covers. It reports the store that was picked, or that
  * it was closed, and leaves choosing the store to whoever asked.
  */
-export const StoreSearchNoDeps = Component.make({
+export const StoreSearchNoDeps = Component.define({
   name: "StoreSearch",
   model: Schema.Struct({
     search: Schema.String,
@@ -65,6 +65,7 @@ export const StoreSearchNoDeps = Component.make({
     current: { load: CurrentStore, args: () => ({}) },
     all: { load: AllStores, args: () => ({}) },
   },
+}).make({
   init: () => ({ search: "" }),
   update: (model, message, $) =>
     Message.match(message, {

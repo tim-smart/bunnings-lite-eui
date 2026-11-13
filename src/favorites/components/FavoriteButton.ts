@@ -18,9 +18,9 @@ export const FavoriteButtonMessage = Schema.TaggedUnion({
 export class ToggleFavorite extends Command.Service<ToggleFavorite>()(
   "favorites/ToggleFavorite",
   {
+    // Invalidates nothing: the favourites refetch themselves after every
+    // change.
     args: { product: ProductBaseInfo },
-    // The favourites refetch themselves after every change
-    invalidates: () => [],
   },
   Effect.gen(function* () {
     const favorites = yield* Favorites
@@ -32,7 +32,7 @@ export class ToggleFavorite extends Command.Service<ToggleFavorite>()(
  * The star that makes a product a favourite. `icon` is the round one on a
  * product card, `button` the labelled one on a product page.
  */
-export const FavoriteButtonNoDeps = Component.make({
+export const FavoriteButtonNoDeps = Component.define({
   name: "FavoriteButton",
   props: Schema.Struct({
     product: ProductBaseInfo,
@@ -43,6 +43,7 @@ export const FavoriteButtonNoDeps = Component.make({
   loaders: {
     favorites: { load: ListFavorites, args: () => ({}) },
   },
+}).make({
   init: () => ({}),
   update: (model, message, $) =>
     FavoriteButtonMessage.match(message, {

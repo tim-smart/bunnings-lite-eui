@@ -46,7 +46,7 @@ export class SetRemoteUrl extends Command.Service<SetRemoteUrl>()(
  */
 export class CopyInvite extends Command.Service<CopyInvite>()(
   "sync/CopyInvite",
-  { args: {}, invalidates: () => [] },
+  { args: {} },
   Effect.gen(function* () {
     const invites = yield* Invites
     const clipboard = yield* Clipboard.Clipboard
@@ -79,7 +79,7 @@ const remoteUrlOf = (text: string): string | null | undefined => {
  * The sync settings, in a drawer. Mount it while it is open, outside the
  * page it covers. It reports when it is closed.
  */
-export const SyncSettingsPanelNoDeps = Component.make({
+export const SyncSettingsPanelNoDeps = Component.define({
   name: "SyncSettingsPanel",
   model: Schema.Struct({
     /** What was typed into the remote field. It shows the saved one until then. */
@@ -92,6 +92,7 @@ export const SyncSettingsPanelNoDeps = Component.make({
   loaders: {
     settings: { load: GetSyncSettings, args: () => ({}) },
   },
+}).make({
   init: () => ({ remoteUrl: null, copied: false }),
   update: (model, message, $) =>
     Message.match(message, {

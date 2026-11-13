@@ -59,7 +59,7 @@ const done = Command.map(() => Message.make({ _tag: "Done" }))
  * applied, which writes the filter to the URL: a price on Enter or on leaving
  * a field, a rating on letting go of the slider.
  */
-export const Filters = Component.make({
+export const Filters = Component.define({
   name: "Filters",
   props: Schema.Struct({
     route: SearchRoute,
@@ -68,6 +68,7 @@ export const Filters = Component.make({
   }),
   model: FiltersModel,
   message: Message,
+}).make({
   init: ($) => untouched($.props.route.query.query),
   update: (model, message, $) => {
     const { price, route } = $.props

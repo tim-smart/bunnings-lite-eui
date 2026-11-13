@@ -13,17 +13,17 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@effect/platform-browser": "https://pkg.pr.new/@effect/platform-browser@b6df0a1",
+    "@effect/platform-browser": "https://pkg.pr.new/@effect/platform-browser@4d0cf03",
     "clsx": "^2.1.1",
-    "effect": "https://pkg.pr.new/effect@b6df0a1",
+    "effect": "https://pkg.pr.new/effect@4d0cf03",
     "tailwind-merge": "^3.6.0",
     "workbox-precaching": "^7.4.0",
     "workbox-routing": "^7.4.0"
   },
   "devDependencies": {
-    "@effect/platform-node": "https://pkg.pr.new/@effect/platform-node@b6df0a1",
+    "@effect/platform-node": "https://pkg.pr.new/@effect/platform-node@4d0cf03",
     "@effect/tsgo": "0.63.0",
-    "@effect/vitest": "https://pkg.pr.new/@effect/vitest@b6df0a1",
+    "@effect/vitest": "https://pkg.pr.new/@effect/vitest@4d0cf03",
     "@playwright/test": "1.59.1",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",

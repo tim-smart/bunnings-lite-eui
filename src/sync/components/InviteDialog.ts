@@ -29,7 +29,7 @@ export const InviteDialogEvents = Schema.TaggedUnion({
  */
 export class JoinSync extends Command.Service<JoinSync>()(
   "sync/JoinSync",
-  { args: {}, invalidates: () => [] },
+  { args: {} },
   Effect.gen(function* () {
     const invites = yield* Invites
     return () => invites.join
@@ -55,7 +55,7 @@ const dismissRef = Html.ref("invite-dismiss", "button")
  * says so when the link can't be read. It is a drawer, and `Shell`
  * mounts it with the others so that only one is open.
  */
-export const InviteDialogNoDeps = Component.make({
+export const InviteDialogNoDeps = Component.define({
   name: "InviteDialog",
   model: Schema.Struct({
     /** The invite waiting for an answer. */
@@ -66,6 +66,7 @@ export const InviteDialogNoDeps = Component.make({
   loaders: {
     settings: { load: GetSyncSettings, args: () => ({}) },
   },
+}).make({
   init: () => ({ invite: null }),
   update: (model, message, $) =>
     Message.match(message, {

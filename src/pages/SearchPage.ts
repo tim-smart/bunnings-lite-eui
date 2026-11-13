@@ -47,7 +47,7 @@ const gridClass =
  * otherwise the results of the search in the URL, a page at a time as the
  * page is scrolled.
  */
-export const SearchPageNoDeps = Component.make({
+export const SearchPageNoDeps = Component.define({
   name: "SearchPage",
   props: Schema.Struct({ route: SearchRoute }),
   model: Schema.Struct({
@@ -78,6 +78,7 @@ export const SearchPageNoDeps = Component.make({
         }),
     },
   },
+}).make({
   init: () => ({ facets: null, scrolled: false }),
   update: (model, message, $) =>
     Message.match(message, {

@@ -47,7 +47,7 @@ export class ChooseStore extends Command.Service<ChooseStore>()(
  */
 export class SearchAllStores extends Command.Service<SearchAllStores>()(
   "stores/SearchAllStores",
-  { args: {}, invalidates: () => [] },
+  { args: {} },
   Effect.gen(function* () {
     const prompt = yield* StoreSearchPrompt
     return () => prompt.ask
@@ -69,7 +69,7 @@ const done = Command.map(() => Message.make({ _tag: "Done" }))
  * The search is a drawer, which the shell shows. It is asked for here and
  * comes back with a store or without one.
  */
-export const StoreSelectorNoDeps = Component.make({
+export const StoreSelectorNoDeps = Component.define({
   name: "StoreSelector",
   model: Schema.Struct({
     /** Whether the nearby stores have been asked for. */
@@ -98,6 +98,7 @@ export const StoreSelectorNoDeps = Component.make({
       args: (model) => (model.nearbyWanted ? {} : undefined),
     },
   },
+}).make({
   init: () => ({
     nearbyWanted: false,
     chosen: null,

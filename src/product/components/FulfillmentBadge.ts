@@ -10,7 +10,7 @@ import { GetFulfillment } from "../loaders/GetFulfillment.ts"
  * Where a product is in the chosen store, or that the store is out of it. It
  * shows nothing until that is known, and its wrapper hides while empty.
  */
-export const FulfillmentBadgeNoDeps = Component.make({
+export const FulfillmentBadgeNoDeps = Component.define({
   name: "FulfillmentBadge",
   props: Schema.Struct({
     id: Schema.String,
@@ -27,6 +27,7 @@ export const FulfillmentBadgeNoDeps = Component.make({
       args: (_model, props) => ({ id: props.id }),
     },
   },
+}).make({
   init: () => ({}),
   update: (model) => model,
   view: (_model, h) => {

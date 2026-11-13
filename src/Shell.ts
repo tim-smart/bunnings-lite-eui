@@ -41,7 +41,7 @@ const Message = ShellMessage
 /** Scrolls the page back to its top. */
 export class ScrollToTop extends Command.Service<ScrollToTop>()(
   "Shell/ScrollToTop",
-  { args: {}, invalidates: () => [] },
+  { args: {} },
   Effect.gen(function* () {
     const viewport = yield* Viewport
     return () => viewport.scrollToTop
@@ -56,7 +56,6 @@ export class AnswerStoreSearch extends Command.Service<AnswerStoreSearch>()(
   "Shell/AnswerStoreSearch",
   {
     args: { store: Schema.Option(SessionLocation) },
-    invalidates: () => [],
   },
   Effect.gen(function* () {
     const prompt = yield* StoreSearchPrompt
@@ -95,7 +94,7 @@ const noStoreFound = AnswerStoreSearch.make({ store: Option.none() }).pipe(done)
  * The drawers are mounted here too, because only one is open at a time. An
  * invite can arrive at any moment, and closes whichever is open.
  */
-export const ShellNoDeps = Component.make({
+export const ShellNoDeps = Component.define({
   name: "Shell",
   props: Schema.Struct({ route: AppRoute }),
   // The search itself belongs to the search page. It is watched here as
@@ -114,6 +113,7 @@ export const ShellNoDeps = Component.make({
       args: (_model, props) => searchArgs(props.route),
     },
   },
+}).make({
   init: () => ({ drawer: null }),
   update: (model, message, $) =>
     Message.match(message, {
