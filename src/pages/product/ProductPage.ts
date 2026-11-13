@@ -1,7 +1,10 @@
 import { DateTime, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Command, Component, Router } from "effect/ui"
-import type { ProductReview } from "../../../server/src/domain/Bazaar.ts"
+import type {
+  ProductReview,
+  ReviewStats,
+} from "../../../server/src/domain/Bazaar.ts"
 import type {
   ProductBaseInfo,
   ProductPriceInfo,
@@ -37,7 +40,7 @@ const Message = ProductPageMessage
 /** Offers the product's page to the device's share sheet. */
 export class ShareProduct extends Command.Service<ShareProduct>()(
   "product/ShareProduct",
-  { args: { title: Schema.String }, invalidates: () => [] },
+  { args: { title: Schema.String } },
   Effect.gen(function* () {
     const share = yield* Share
     return ({ title }) => share.sharePage(title)
@@ -46,12 +49,7 @@ export class ShareProduct extends Command.Service<ShareProduct>()(
 
 const done = Command.map(() => Message.make({ _tag: "Done" }))
 
-/**
- * A product: its photos, price, stock at the chosen store, description,
- * specifications and reviews. It opens with what a search or the favourites
- * already said about the product while the rest loads.
- */
-export const ProductPageNoDeps = Component.make({
+const ProductPageDef = Component.define({
   name: "ProductPage",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({
@@ -71,70 +69,11 @@ export const ProductPageNoDeps = Component.make({
     },
     reviews: { load: ListReviews, args: (_model, props) => ({ id: props.id }) },
   },
-  init: () => ({ image: 0 }),
-  update: (model, message, $) =>
-    Message.match(message, {
-      ImageChosen: ({ index }) => ({ ...model, image: index }),
-      BackPressed: () => $.run(Router.Back.make().pipe(done)),
-      SharePressed: ({ title }) =>
-        $.run(ShareProduct.make({ title }).pipe(done)),
-      // Only when there are more reviews that nothing is loading yet
-      BottomReached: () =>
-        Option.exists(
-          AsyncResult.value($.loaded.reviews),
-          (list) => list.more._tag === "Available",
-        )
-          ? $.loadMore("reviews")
-          : model,
-      Done: () => model,
-    }),
-  subscriptions: () => [bottomReached(Message.make({ _tag: "BottomReached" }))],
-  view: (model, h) => {
-    const fullInfo: Option.Option<ProductPriceInfo> = AsyncResult.value(
-      h.loaded.product,
-    )
-    const base: Option.Option<ProductBaseInfo> = Option.orElse(
-      Option.map(fullInfo, (info) => info.asBaseInfo),
-      () => Option.flatten(AsyncResult.value(h.loaded.known)),
-    )
+})
 
-    if (Option.isNone(base)) {
-      return AsyncResult.isFailure(h.loaded.product)
-        ? h.div
-            .class(
-              "flex flex-col items-center gap-4 pt-20 text-lg text-muted-foreground",
-            )
-            .children(
-              h.p
-                .attr("role", "status")
-                .children("Couldn't load this product."),
-              h.a
-                .attr("href", "/")
-                .class(buttonClass({ variant: "outline" }))
-                .children("Back to search"),
-            )
-        : h.div
-            .class(
-              "flex h-full items-center justify-center text-lg text-muted-foreground pt-20 animate-pulse",
-            )
-            .children("Loading product...")
-    }
-    const product = base.value
-
-    const stats = Option.map(
-      Option.flatten(AsyncResult.value(h.loaded.stats)),
-      (stats) => stats.ReviewStatistics,
-    )
-    const rating = Option.match(stats, {
-      onNone: () => product.rating,
-      onSome: (stats) => stats.AverageOverallRating,
-    })
-    const reviewCount = Option.match(stats, {
-      onNone: () => product.numberOfReviews,
-      onSome: (stats) => stats.TotalReviewCount,
-    })
-
-    const description = Option.match(fullInfo, {
+const description = ProductPageDef.fragment(
+  (h, fullInfo: Option.Option<ProductPriceInfo>) =>
+    Option.match(fullInfo, {
       onNone: () =>
         h.div
           .class("flex flex-col space-y-2")
@@ -162,66 +101,73 @@ export const ProductPageNoDeps = Component.make({
             ),
           )
       },
-    })
+    }),
+)
 
-    const specificationRow =
-      "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-4 rounded-lg px-2 even:bg-canvas lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] sm:px-3"
+const specificationRow =
+  "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-4 rounded-lg px-2 even:bg-canvas lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] sm:px-3"
+
+const specificationsSection = ProductPageDef.fragment(
+  (h, fullInfo: Option.Option<ProductPriceInfo>) => {
     const specifications = Option.map(
       fullInfo,
       (info) => info.info.specifications,
     )
-    const specificationsSection =
-      Option.isSome(specifications) && specifications.value.length === 0
-        ? undefined
-        : h.section
-            .attr("aria-labelledby", "specifications-heading")
-            .class("rounded-xl bg-card p-4 sm:p-6")
-            .children(
-              h.h2
-                .id("specifications-heading")
-                .class("text-lg font-bold tracking-tight mb-3")
-                .children("Specifications"),
-              Option.match(specifications, {
-                onNone: () =>
-                  h.div
-                    .class("-mx-2 flex flex-col sm:-mx-3")
-                    .children(
-                      [0, 1, 2, 3, 4, 5].map((i) =>
-                        h.div
-                          .class(specificationRow, "py-3")
-                          .key(String(i))
-                          .children(
-                            skeleton(h, "h-3.5 w-3/4"),
-                            skeleton(h, "h-3.5 w-1/2"),
-                          ),
-                      ),
+    return Option.isSome(specifications) && specifications.value.length === 0
+      ? undefined
+      : h.section
+          .attr("aria-labelledby", "specifications-heading")
+          .class("rounded-xl bg-card p-4 sm:p-6")
+          .children(
+            h.h2
+              .id("specifications-heading")
+              .class("text-lg font-bold tracking-tight mb-3")
+              .children("Specifications"),
+            Option.match(specifications, {
+              onNone: () =>
+                h.div
+                  .class("-mx-2 flex flex-col sm:-mx-3")
+                  .children(
+                    [0, 1, 2, 3, 4, 5].map((i) =>
+                      h.div
+                        .class(specificationRow, "py-3")
+                        .key(String(i))
+                        .children(
+                          skeleton(h, "h-3.5 w-3/4"),
+                          skeleton(h, "h-3.5 w-1/2"),
+                        ),
                     ),
-                onSome: (specifications) =>
-                  h.dl
-                    .class("-mx-2 flex flex-col sm:-mx-3")
-                    .children(
-                      specifications.map((spec, i) =>
-                        h.div
-                          .class(
-                            specificationRow,
-                            "py-2.5 text-sm leading-snug sm:text-[15px]",
-                          )
-                          .key(String(i))
-                          .children(
-                            h.dt
-                              .class("text-muted-foreground")
-                              .children(spec.name),
-                            h.dd
-                              .class("font-medium break-words tabular-nums")
-                              .children(spec.value),
-                          ),
-                      ),
+                  ),
+              onSome: (specifications) =>
+                h.dl
+                  .class("-mx-2 flex flex-col sm:-mx-3")
+                  .children(
+                    specifications.map((spec, i) =>
+                      h.div
+                        .class(
+                          specificationRow,
+                          "py-2.5 text-sm leading-snug sm:text-[15px]",
+                        )
+                        .key(String(i))
+                        .children(
+                          h.dt
+                            .class("text-muted-foreground")
+                            .children(spec.name),
+                          h.dd
+                            .class("font-medium break-words tabular-nums")
+                            .children(spec.value),
+                        ),
                     ),
-              }),
-            )
+                  ),
+            }),
+          )
+  },
+)
 
-    const image = product.images[model.image] ?? product.images[0]
-    const images = h.div
+const images = ProductPageDef.fragment(
+  (h, product: ProductBaseInfo, chosen: number) => {
+    const image = product.images[chosen] ?? product.images[0]
+    return h.div
       .class(
         "flex flex-col gap-2 sm:gap-3 md:col-start-1 md:row-start-1 md:row-span-2 md:sticky md:top-6 md:self-start",
       )
@@ -244,10 +190,10 @@ export const ProductPageNoDeps = Component.make({
             h.button
               .attr("type", "button")
               .attr("aria-label", `Show image ${i + 1}`)
-              .attr("aria-current", i === model.image ? "true" : undefined)
+              .attr("aria-current", i === chosen ? "true" : undefined)
               .class(
                 "aspect-square cursor-pointer rounded-lg bg-image-well p-2 text-image-well-foreground ring-inset transition-shadow hover:ring-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
-                i === model.image
+                i === chosen
                   ? "ring-2 ring-brand hover:ring-brand"
                   : "hover:ring-brand/30",
               )
@@ -262,8 +208,12 @@ export const ProductPageNoDeps = Component.make({
           ),
         ),
       )
+  },
+)
 
-    const reviewsOverview = Option.match(stats, {
+const reviewsOverview = ProductPageDef.fragment(
+  (h, stats: Option.Option<ReviewStats["ReviewStatistics"]>) =>
+    Option.match(stats, {
       onNone: () =>
         h.div
           .class(
@@ -332,171 +282,240 @@ export const ProductPageNoDeps = Component.make({
               }),
             ),
           ),
-    })
+    }),
+)
 
-    const reviewCard = (review: ProductReview) =>
-      h.div
-        .class(cardClass("gap-0 py-5"))
-        .key(review.Id)
-        .children(
-          h.div.class("px-5").children(
-            h.div.class("flex justify-between items-start gap-4").children(
-              h.div
-                .class("flex flex-col gap-1.5")
-                .children(
-                  starRating(h, { size: "sm", rating: review.Rating }),
-                  h.h3
-                    .class("font-semibold leading-snug")
-                    .children(review.Title ?? ""),
-                ),
-              h.span
-                .class("shrink-0 text-sm text-muted-foreground tabular-nums")
-                .children(
-                  DateTime.formatLocal(review.SubmissionTime, {
-                    dateStyle: "short",
-                  }),
-                ),
+const reviewCard = ProductPageDef.fragment((h, review: ProductReview) =>
+  h.div
+    .class(cardClass("gap-0 py-5"))
+    .key(review.Id)
+    .children(
+      h.div.class("px-5").children(
+        h.div.class("flex justify-between items-start gap-4").children(
+          h.div
+            .class("flex flex-col gap-1.5")
+            .children(
+              starRating(h, { size: "sm", rating: review.Rating }),
+              h.h3
+                .class("font-semibold leading-snug")
+                .children(review.Title ?? ""),
+            ),
+          h.span
+            .class("shrink-0 text-sm text-muted-foreground tabular-nums")
+            .children(
+              DateTime.formatLocal(review.SubmissionTime, {
+                dateStyle: "short",
+              }),
+            ),
+        ),
+        h.div
+          .class(
+            "mt-2 prose prose-sm max-w-none dark:prose-invert prose-p:text-foreground/85",
+          )
+          .children(
+            richText(h, parseRichText(review.ReviewText, { html: false })),
+          ),
+      ),
+    ),
+)
+
+const productPageView = ProductPageDef.view((model, h) => {
+  const fullInfo: Option.Option<ProductPriceInfo> = AsyncResult.value(
+    h.loaded.product,
+  )
+  const base: Option.Option<ProductBaseInfo> = Option.orElse(
+    Option.map(fullInfo, (info) => info.asBaseInfo),
+    () => Option.flatten(AsyncResult.value(h.loaded.known)),
+  )
+
+  if (Option.isNone(base)) {
+    return AsyncResult.isFailure(h.loaded.product)
+      ? h.div
+          .class(
+            "flex flex-col items-center gap-4 pt-20 text-lg text-muted-foreground",
+          )
+          .children(
+            h.p.attr("role", "status").children("Couldn't load this product."),
+            h.a
+              .attr("href", "/")
+              .class(buttonClass({ variant: "outline" }))
+              .children("Back to search"),
+          )
+      : h.div
+          .class(
+            "flex h-full items-center justify-center text-lg text-muted-foreground pt-20 animate-pulse",
+          )
+          .children("Loading product...")
+  }
+  const product = base.value
+
+  const stats = Option.map(
+    Option.flatten(AsyncResult.value(h.loaded.stats)),
+    (stats) => stats.ReviewStatistics,
+  )
+  const rating = Option.match(stats, {
+    onNone: () => product.rating,
+    onSome: (stats) => stats.AverageOverallRating,
+  })
+  const reviewCount = Option.match(stats, {
+    onNone: () => product.numberOfReviews,
+    onSome: (stats) => stats.TotalReviewCount,
+  })
+
+  const reviews = Option.match(
+    Option.orElse(
+      AsyncResult.value(h.loaded.reviews),
+      () => h.previous.reviews,
+    ),
+    { onNone: () => [], onSome: (list) => list.items },
+  )
+
+  return h.div(
+    h.div.class("py-3 sm:py-4").children(
+      h.button
+        .attr("type", "button")
+        .class(buttonClass({ variant: "link", class: "-ml-3 cursor-pointer" }))
+        .onClick(Message.make({ _tag: "BackPressed" }))
+        .children(icon(h, "arrowLeft"), "Back"),
+    ),
+    h.div
+      .class(
+        "grid grid-cols-1 gap-4 md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-8 md:gap-y-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,6fr)] lg:gap-x-12",
+      )
+      .children(
+        h.div
+          .class("flex flex-col gap-5 md:col-start-2 md:row-start-1 md:pt-2")
+          .children(
+            h.div.class("flex flex-col gap-3").children(
+              h.h1
+                .class(
+                  "text-2xl md:text-3xl font-bold leading-tight tracking-tight text-balance",
+                )
+                .children(product.title),
+              h.div.class("flex flex-wrap gap-3 items-center").children(
+                h.child(FulfillmentBadge, {
+                  key: "fulfillment",
+                  props: {
+                    id: product.id,
+                    showAvailable: false,
+                    class: "empty:hidden",
+                  },
+                }),
+                h.span
+                  .class("text-sm text-muted-foreground tabular-nums")
+                  .children(`I/N: ${product.id}`),
+              ),
             ),
             h.div
+              .class("flex flex-wrap items-center gap-x-6 gap-y-2")
+              .children(
+                h.div
+                  .class("flex items-baseline gap-2")
+                  .children(
+                    h.span
+                      .class(
+                        "text-4xl font-bold tracking-tight tabular-nums text-primary",
+                      )
+                      .children(formatPrice(product.price)),
+                    h.span
+                      .class("text-sm text-muted-foreground")
+                      .children("inc. GST"),
+                  ),
+                h.div
+                  .class("flex items-center gap-2")
+                  .children(
+                    starRating(h, { rating }),
+                    h.span
+                      .class("text-sm text-muted-foreground tabular-nums")
+                      .children(`(${reviewCount} reviews)`),
+                  ),
+              ),
+            h.div
               .class(
-                "mt-2 prose prose-sm max-w-none dark:prose-invert prose-p:text-foreground/85",
+                "grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center",
               )
               .children(
-                richText(h, parseRichText(review.ReviewText, { html: false })),
+                h.a
+                  .attr("href", product.url)
+                  .attr("target", "_blank")
+                  .attr("rel", "noopener noreferrer")
+                  .class(
+                    buttonClass({
+                      variant: "secondary",
+                      size: "lg",
+                      class: "col-span-2",
+                    }),
+                  )
+                  .children("Open in Bunnings", icon(h, "arrowRight")),
+                h.child(FavoriteButton, {
+                  key: "favorite",
+                  props: { product, variant: "button" },
+                }),
+                h.button
+                  .attr("type", "button")
+                  .class(buttonClass({ variant: "outline", size: "lg" }))
+                  .onClick(
+                    Message.make({
+                      _tag: "SharePressed",
+                      title: product.title,
+                    }),
+                  )
+                  .children(icon(h, "share"), "Share"),
               ),
           ),
-        )
-
-    const reviews = Option.match(
-      Option.orElse(
-        AsyncResult.value(h.loaded.reviews),
-        () => h.previous.reviews,
+        images(h, product, model.image),
+        h.div
+          .class("flex flex-col gap-4 md:col-start-2 md:row-start-2 md:gap-5")
+          .children(
+            h.div
+              .class("rounded-xl bg-card p-4 sm:p-6")
+              .children(description(h, fullInfo)),
+            specificationsSection(h, fullInfo),
+          ),
       ),
-      { onNone: () => [], onSome: (list) => list.items },
-    )
-
-    return h.div(
-      h.div.class("py-3 sm:py-4").children(
-        h.button
-          .attr("type", "button")
+    h.div.class("h-10 md:h-16"),
+    h.section
+      .attr("aria-labelledby", "reviews-heading")
+      .children(
+        h.h2
+          .id("reviews-heading")
+          .class("text-xl md:text-2xl font-bold tracking-tight mb-4")
+          .children("Customer Reviews"),
+        reviewsOverview(h, stats),
+        h.div
           .class(
-            buttonClass({ variant: "link", class: "-ml-3 cursor-pointer" }),
+            "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4",
           )
-          .onClick(Message.make({ _tag: "BackPressed" }))
-          .children(icon(h, "arrowLeft"), "Back"),
+          .children(reviews.map((review) => reviewCard(h, review))),
       ),
-      h.div
-        .class(
-          "grid grid-cols-1 gap-4 md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-8 md:gap-y-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,6fr)] lg:gap-x-12",
+  )
+})
+
+/**
+ * A product: its photos, price, stock at the chosen store, description,
+ * specifications and reviews. It opens with what a search or the favourites
+ * already said about the product while the rest loads.
+ */
+export const ProductPageNoDeps = ProductPageDef.make({
+  init: () => ({ image: 0 }),
+  update: (model, message, $) =>
+    Message.match(message, {
+      ImageChosen: ({ index }) => ({ ...model, image: index }),
+      BackPressed: () => $.run(Router.Back.make().pipe(done)),
+      SharePressed: ({ title }) =>
+        $.run(ShareProduct.make({ title }).pipe(done)),
+      // Only when there are more reviews that nothing is loading yet
+      BottomReached: () =>
+        Option.exists(
+          AsyncResult.value($.loaded.reviews),
+          (list) => list.more._tag === "Available",
         )
-        .children(
-          h.div
-            .class("flex flex-col gap-5 md:col-start-2 md:row-start-1 md:pt-2")
-            .children(
-              h.div.class("flex flex-col gap-3").children(
-                h.h1
-                  .class(
-                    "text-2xl md:text-3xl font-bold leading-tight tracking-tight text-balance",
-                  )
-                  .children(product.title),
-                h.div.class("flex flex-wrap gap-3 items-center").children(
-                  h.child(FulfillmentBadge, {
-                    key: "fulfillment",
-                    props: {
-                      id: product.id,
-                      showAvailable: false,
-                      class: "empty:hidden",
-                    },
-                  }),
-                  h.span
-                    .class("text-sm text-muted-foreground tabular-nums")
-                    .children(`I/N: ${product.id}`),
-                ),
-              ),
-              h.div
-                .class("flex flex-wrap items-center gap-x-6 gap-y-2")
-                .children(
-                  h.div
-                    .class("flex items-baseline gap-2")
-                    .children(
-                      h.span
-                        .class(
-                          "text-4xl font-bold tracking-tight tabular-nums text-primary",
-                        )
-                        .children(formatPrice(product.price)),
-                      h.span
-                        .class("text-sm text-muted-foreground")
-                        .children("inc. GST"),
-                    ),
-                  h.div
-                    .class("flex items-center gap-2")
-                    .children(
-                      starRating(h, { rating }),
-                      h.span
-                        .class("text-sm text-muted-foreground tabular-nums")
-                        .children(`(${reviewCount} reviews)`),
-                    ),
-                ),
-              h.div
-                .class(
-                  "grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center",
-                )
-                .children(
-                  h.a
-                    .attr("href", product.url)
-                    .attr("target", "_blank")
-                    .attr("rel", "noopener noreferrer")
-                    .class(
-                      buttonClass({
-                        variant: "secondary",
-                        size: "lg",
-                        class: "col-span-2",
-                      }),
-                    )
-                    .children("Open in Bunnings", icon(h, "arrowRight")),
-                  h.child(FavoriteButton, {
-                    key: "favorite",
-                    props: { product, variant: "button" },
-                  }),
-                  h.button
-                    .attr("type", "button")
-                    .class(buttonClass({ variant: "outline", size: "lg" }))
-                    .onClick(
-                      Message.make({
-                        _tag: "SharePressed",
-                        title: product.title,
-                      }),
-                    )
-                    .children(icon(h, "share"), "Share"),
-                ),
-            ),
-          images,
-          h.div
-            .class("flex flex-col gap-4 md:col-start-2 md:row-start-2 md:gap-5")
-            .children(
-              h.div
-                .class("rounded-xl bg-card p-4 sm:p-6")
-                .children(description),
-              specificationsSection,
-            ),
-        ),
-      h.div.class("h-10 md:h-16"),
-      h.section
-        .attr("aria-labelledby", "reviews-heading")
-        .children(
-          h.h2
-            .id("reviews-heading")
-            .class("text-xl md:text-2xl font-bold tracking-tight mb-4")
-            .children("Customer Reviews"),
-          reviewsOverview,
-          h.div
-            .class(
-              "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4",
-            )
-            .children(reviews.map(reviewCard)),
-        ),
-    )
-  },
+          ? $.loadMore("reviews")
+          : model,
+      Done: () => model,
+    }),
+  subscriptions: () => [bottomReached(Message.make({ _tag: "BottomReached" }))],
+  view: productPageView,
 })
 
 export const ProductPage = ProductPageNoDeps.pipe(

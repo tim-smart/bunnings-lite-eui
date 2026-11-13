@@ -14,7 +14,7 @@ const Message = InstallButtonMessage
 /** Shows the browser's prompt to install the app. */
 export class PromptInstall extends Command.Service<PromptInstall>()(
   "browser/PromptInstall",
-  { args: {}, invalidates: () => [] },
+  { args: {} },
   Effect.gen(function* () {
     const install = yield* InstallPrompt
     return () => install.prompt
@@ -35,10 +35,11 @@ const installAvailable = Subscription.make(
 )
 
 /** Offers to install the app, once the browser says it can be. */
-export const InstallButtonNoDeps = Component.make({
+export const InstallButtonNoDeps = Component.define({
   name: "InstallButton",
   model: Schema.Struct({ available: Schema.Boolean }),
   message: Message,
+}).make({
   init: () => ({ available: false }),
   update: (model, message, $) =>
     Message.match(message, {

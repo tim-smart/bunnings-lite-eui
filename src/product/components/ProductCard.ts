@@ -13,7 +13,7 @@ import { FulfillmentBadge } from "./FulfillmentBadge.ts"
  * favourite star. The star sits beside the link, not inside it, so pressing
  * it doesn't follow the link.
  */
-export const ProductCard = Component.make({
+export const ProductCard = Component.define({
   name: "ProductCard",
   props: Schema.Struct({
     product: ProductBaseInfo,
@@ -22,6 +22,7 @@ export const ProductCard = Component.make({
   }),
   model: Schema.Struct({}),
   message: Schema.Never,
+}).make({
   init: () => ({}),
   update: (model) => model,
   view: (_model, h) => {

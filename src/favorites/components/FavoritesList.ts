@@ -17,9 +17,9 @@ const Message = FavoritesListMessage
 export class ClearFavorites extends Command.Service<ClearFavorites>()(
   "favorites/ClearFavorites",
   {
+    // Invalidates nothing: the favourites refetch themselves after every
+    // change.
     args: {},
-    // The favourites refetch themselves after every change
-    invalidates: () => [],
   },
   Effect.gen(function* () {
     const favorites = yield* Favorites
@@ -28,13 +28,14 @@ export class ClearFavorites extends Command.Service<ClearFavorites>()(
 ) {}
 
 /** The favourites as a grid of product cards, newest first. */
-export const FavoritesListNoDeps = Component.make({
+export const FavoritesListNoDeps = Component.define({
   name: "FavoritesList",
   model: Schema.Struct({}),
   message: Message,
   loaders: {
     favorites: { load: ListFavorites, args: () => ({}) },
   },
+}).make({
   init: () => ({}),
   update: (model, message, $) =>
     Message.match(message, {

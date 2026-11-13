@@ -21,7 +21,7 @@ export const AppMessage = Schema.TaggedUnion({
  */
 export class FinishJoin extends Command.Service<FinishJoin>()(
   "App/FinishJoin",
-  { args: {}, stream: true, invalidates: () => [] },
+  { args: {}, stream: true },
   Effect.gen(function* () {
     const join = yield* PendingJoin
     return () => join.finish
@@ -30,14 +30,14 @@ export class FinishJoin extends Command.Service<FinishJoin>()(
 
 export class ReloadPage extends Command.Service<ReloadPage>()(
   "App/ReloadPage",
-  { args: {}, invalidates: () => [] },
+  { args: {} },
   Effect.gen(function* () {
     const page = yield* Reload
     return () => page.reload
   }),
 ) {}
 
-export const AppNoDeps = Component.make({
+export const AppNoDeps = Component.define({
   name: "App",
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({
@@ -45,6 +45,7 @@ export const AppNoDeps = Component.make({
     join: Schema.Literals(["Checking", "Blocked", "Failed", "Ready"]),
   }),
   message: AppMessage,
+}).make({
   init: ($) =>
     $.set({ route: $.props.route, join: "Checking" }).run(
       FinishJoin.make().pipe(
