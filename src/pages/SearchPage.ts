@@ -34,6 +34,7 @@ export const SearchPageMessage = Schema.TaggedUnion({
   Scrolled: { scrolled: Schema.Boolean },
   SearchWanted: {},
   WentHome: {},
+  ResultsShown: {},
 })
 const Message = SearchPageMessage
 
@@ -41,6 +42,16 @@ const Message = SearchPageMessage
 const wentHome = Subscription.make(
   "search/wentHome",
   Stream.make(Message.make({ _tag: "WentHome" })),
+)
+
+/**
+ * Sends `ResultsShown` once the search after going home has results. A
+ * cached search shows them at once and never changes the loader's slot, so
+ * `onChange` can't tell.
+ */
+const resultsShown = Subscription.make(
+  "search/resultsShown",
+  Stream.make(Message.make({ _tag: "ResultsShown" })),
 )
 
 /** Asks whoever holds the search box to bring it back into reach. */
@@ -66,7 +77,8 @@ export const SearchPageNoDeps = Component.define({
     scrolled: Schema.Boolean,
     /**
      * Whether the results the loader still holds are from before the page
-     * last went home. A new search doesn't show them while it loads.
+     * last went home. A new search doesn't show them, or their filters,
+     * while it loads.
      */
     stale: Schema.Boolean,
   }),
@@ -100,8 +112,6 @@ export const SearchPageNoDeps = Component.define({
           facets !== null && facets.query !== model.facets?.query
             ? facets
             : model.facets,
-        // Facets come with the first results of the search
-        stale: model.stale && facets === null,
       }),
       // Only when there is a next page that nothing is loading yet
       BottomReached: () =>
@@ -114,13 +124,16 @@ export const SearchPageNoDeps = Component.define({
       Scrolled: ({ scrolled }) => ({ ...model, scrolled }),
       SearchWanted: () =>
         $.set(model).emit(SearchPageEvents.make({ _tag: "SearchWanted" })),
-      // The next search starts over: no results or filters from the last one
-      WentHome: () => ({ ...model, facets: null, stale: true }),
+      WentHome: () => ({ ...model, stale: true }),
+      ResultsShown: () => ({ ...model, stale: false }),
     }),
-  subscriptions: (_model, props) => [
+  subscriptions: (model, props, loaded) => [
     ...(searchArgs(props.route) === undefined
       ? [wentHome]
       : [
+          ...(model.stale && AsyncResult.isSuccess(loaded.results)
+            ? [resultsShown]
+            : []),
           bottomReached(Message.make({ _tag: "BottomReached" })),
           scrolledPast(200, (scrolled) =>
             Message.make({ _tag: "Scrolled", scrolled }),
@@ -242,12 +255,16 @@ export const SearchPageNoDeps = Component.define({
       onSuccess: ({ value }) => grid(value.items),
     })
 
+    // A search from before going home keeps its filters only for its own text
+    const facets =
+      model.stale && model.facets?.query !== args.query ? null : model.facets
+
     return h.div.key("results").children(
       h.div.class("h-4 sm:h-6"),
-      model.facets !== null &&
+      facets !== null &&
         h.child(Filters, {
           key: "filters",
-          props: { route, price: model.facets.price },
+          props: { route, price: facets.price },
         }),
       h.div.class("h-3 sm:h-4"),
       results,
