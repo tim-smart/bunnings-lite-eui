@@ -124,6 +124,8 @@ test("an invite that arrives over an open drawer takes its place", async ({
 
   // Over another invite, Enter must not join the one that replaced it
   await arrive(link)
+  // Tab before the prompt has opened would move focus on the page instead
+  await expect(cancel).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(prompt.getByRole("button", { name: "Join" })).toBeFocused()
   await arrive(other.link)
