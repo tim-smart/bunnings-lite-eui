@@ -154,6 +154,8 @@ export const SearchPageNoDeps = Component.define({
     const skeletons = () =>
       h.div
         .class(gridClass)
+        .attr("role", "status")
+        .attr("aria-label", "Loading results")
         .children(
           [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
             h.div

@@ -93,7 +93,11 @@ const Drawer = Schema.NullOr(
 
 const ShellDef = Component.define({
   name: "Shell",
-  props: Schema.Struct({ route: AppRoute }),
+  props: Schema.Struct({
+    route: AppRoute,
+    /** Starts the search page over when it changes. */
+    searchesCleared: Schema.Number,
+  }),
   model: Schema.Struct({
     /** The drawer that is open. */
     drawer: Drawer,
@@ -338,7 +342,9 @@ const page = ShellDef.fragment((h, route: AppRoute) => {
   return AppRoute.match(route, {
     Search: (route) =>
       h.child(SearchPage, {
-        key: "search",
+        // A new search page for each search after clearing to home, so it
+        // can't show the last search's results while the next one loads
+        key: `search:${h.props.searchesCleared}`,
         props: { route },
         onEmit: () => Message.make({ _tag: "SearchWanted" }),
         fallback: failed,
