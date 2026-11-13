@@ -1,6 +1,6 @@
 import { DateTime, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Command, Component, Router } from "effect/ui"
+import { Command, Component, Head, Router } from "effect/ui"
 import type {
   ProductReview,
   ReviewStats,
@@ -10,7 +10,7 @@ import type {
   ProductPriceInfo,
 } from "../../../server/src/domain/Bunnings.ts"
 import { Share } from "../../browser/services/Share.ts"
-import { bottomReached } from "../../browser/subscriptions.ts"
+import { bottomReached, hasMore } from "../../browser/subscriptions.ts"
 import { buttonClass, cardClass } from "../../design/classes.ts"
 import { icon } from "../../design/icons.ts"
 import { richText } from "../../design/richText.ts"
@@ -47,7 +47,20 @@ export class ShareProduct extends Command.Service<ShareProduct>()(
   }),
 ) {}
 
-const done = Command.map(() => Message.make({ _tag: "Done" }))
+const done = Command.as(Message.make({ _tag: "Done" }))
+
+/**
+ * What is known of the product so far: all of it once it has loaded, until
+ * then what a search or the favourites said about it.
+ */
+const productOf = (
+  fullInfo: Option.Option<ProductPriceInfo>,
+  known: Option.Option<Option.Option<ProductBaseInfo>>,
+): Option.Option<ProductBaseInfo> =>
+  Option.orElse(
+    Option.map(fullInfo, (info) => info.asBaseInfo),
+    () => Option.flatten(known),
+  )
 
 const ProductPageDef = Component.define({
   name: "ProductPage",
@@ -323,10 +336,7 @@ const productPageView = ProductPageDef.view((model, h) => {
   const fullInfo: Option.Option<ProductPriceInfo> = AsyncResult.value(
     h.loaded.product,
   )
-  const base: Option.Option<ProductBaseInfo> = Option.orElse(
-    Option.map(fullInfo, (info) => info.asBaseInfo),
-    () => Option.flatten(AsyncResult.value(h.loaded.known)),
-  )
+  const base = productOf(fullInfo, AsyncResult.value(h.loaded.known))
 
   if (Option.isNone(base)) {
     return AsyncResult.isFailure(h.loaded.product)
@@ -504,17 +514,22 @@ export const ProductPageNoDeps = ProductPageDef.make({
       BackPressed: () => $.run(Router.Back.make().pipe(done)),
       SharePressed: ({ title }) =>
         $.run(ShareProduct.make({ title }).pipe(done)),
-      // Only when there are more reviews that nothing is loading yet
       BottomReached: () =>
-        Option.exists(
-          AsyncResult.value($.loaded.reviews),
-          (list) => list.more._tag === "Available",
-        )
-          ? $.loadMore("reviews")
-          : model,
+        hasMore($.loaded.reviews) ? $.loadMore("reviews") : model,
       Done: () => model,
     }),
   subscriptions: () => [bottomReached(Message.make({ _tag: "BottomReached" }))],
+  head: (_model, _props, loaded) => [
+    Head.title(
+      Option.match(
+        productOf(
+          AsyncResult.value(loaded.product),
+          AsyncResult.value(loaded.known),
+        ),
+        { onNone: () => "Product", onSome: (product) => product.title },
+      ),
+    ),
+  ],
   view: productPageView,
 })
 

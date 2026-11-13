@@ -22,26 +22,13 @@ const Message = FiltersMessage
  * What is being typed and dragged, before it is applied. An end that is
  * `null` hasn't been touched, and shows the filter in the URL.
  */
-export const FiltersModel = Schema.Struct({
-  /** The search these edits were made under. They don't carry to another. */
-  forQuery: Schema.String,
+const FiltersModel = Schema.Struct({
   priceMin: Schema.NullOr(Schema.String),
   priceMax: Schema.NullOr(Schema.String),
   ratingMin: Schema.NullOr(Schema.Number),
   ratingMax: Schema.NullOr(Schema.Number),
 })
 type Model = typeof FiltersModel.Type
-
-const untouched = (forQuery: string): Model => ({
-  forQuery,
-  priceMin: null,
-  priceMax: null,
-  ratingMin: null,
-  ratingMax: null,
-})
-
-const editsFor = (model: Model, route: SearchRoute): Model =>
-  model.forQuery === route.query.query ? model : untouched(route.query.query)
 
 const parse = (text: string | null): number | undefined => {
   if (text === null || text.trim() === "") return undefined
@@ -52,12 +39,22 @@ const parse = (text: string | null): number | undefined => {
 const minRef = Html.ref("price-min", "input")
 const maxRef = Html.ref("price-max", "input")
 
-const done = Command.map(() => Message.make({ _tag: "Done" }))
+const doneMessage = Message.make({ _tag: "Done" })
+const done = Command.as(doneMessage)
+
+/** The rating range the slider shows: what is being dragged, else the URL's. */
+const ratingRange = (model: Model, route: SearchRoute) => ({
+  min: model.ratingMin ?? route.query.ratingMin ?? ratingFacet.start,
+  max: model.ratingMax ?? route.query.ratingMax ?? ratingFacet.end,
+})
 
 /**
  * The price and rating filters of a search. Edits stay here until they are
  * applied, which writes the filter to the URL: a price on Enter or on leaving
  * a field, a rating on letting go of the slider.
+ *
+ * Its parent keys it by the search text, so edits that weren't applied don't
+ * carry to another search.
  */
 export const Filters = Component.define({
   name: "Filters",
@@ -69,99 +66,81 @@ export const Filters = Component.define({
   model: FiltersModel,
   message: Message,
 }).make({
-  init: ($) => untouched($.props.route.query.query),
+  init: () => ({
+    priceMin: null,
+    priceMax: null,
+    ratingMin: null,
+    ratingMax: null,
+  }),
   update: (model, message, $) => {
     const { price, route } = $.props
-    const edits = editsFor(model, route)
     const { priceMax, priceMin, ratingMax, ratingMin } = route.query
+    const patch = (query: Router.QueryPatch<SearchRoute>) =>
+      Router.patchQuery(AppRoute, route, query).pipe(done)
 
     // An end that was never typed is filled in for the search, but its field
     // stays empty: it may be the one being typed in next
     const typedOnly: Model = {
-      ...edits,
-      priceMin: edits.priceMin ?? (priceMin === undefined ? "" : null),
-      priceMax: edits.priceMax ?? (priceMax === undefined ? "" : null),
+      ...model,
+      priceMin: model.priceMin ?? (priceMin === undefined ? "" : null),
+      priceMax: model.priceMax ?? (priceMax === undefined ? "" : null),
     }
-
-    const applyPrice = (min: number, max: number) =>
-      priceMin === min && priceMax === max
-        ? edits
-        : $.set(typedOnly).run(
-            Router.patchQuery(AppRoute, route, {
-              priceMin: min,
-              priceMax: max,
-            }).pipe(done),
-          )
 
     return Message.match(message, {
       PriceTyped: ({ end, text }) =>
         end === "min"
-          ? { ...edits, priceMin: text }
-          : { ...edits, priceMax: text },
+          ? { ...model, priceMin: text }
+          : { ...model, priceMax: text },
       PriceLeft: ({ end }) => {
-        if (price === null) return edits
-        const min = parse(edits.priceMin)
-        const max = parse(edits.priceMax)
+        if (price === null) return model
+        const typedMin = parse(model.priceMin)
+        const typedMax = parse(model.priceMax)
         // Leaving a field that holds no number applies nothing
-        if ((end === "min" ? min : max) === undefined) return edits
-        return applyPrice(
-          min ?? priceMin ?? Math.floor(price.start),
-          max ?? priceMax ?? Math.ceil(price.end),
-        )
+        if ((end === "min" ? typedMin : typedMax) === undefined) return model
+        const min = typedMin ?? priceMin ?? Math.floor(price.start)
+        const max = typedMax ?? priceMax ?? Math.ceil(price.end)
+        return priceMin === min && priceMax === max
+          ? model
+          : $.set(typedOnly).run(patch({ priceMin: min, priceMax: max }))
       },
       PriceSubmitted: () => {
-        if (price === null) return edits
-        const min = parse(edits.priceMin) ?? priceMin ?? Math.floor(price.start)
-        const max = parse(edits.priceMax) ?? priceMax ?? Math.ceil(price.end)
+        if (price === null) return model
         return $.set(typedOnly).run(
-          Router.patchQuery(AppRoute, route, {
-            priceMin: min,
-            priceMax: max,
-          }).pipe(done),
-          Html.blur(minRef, () => Message.make({ _tag: "Done" })),
-          Html.blur(maxRef, () => Message.make({ _tag: "Done" })),
+          patch({
+            priceMin:
+              parse(model.priceMin) ?? priceMin ?? Math.floor(price.start),
+            priceMax: parse(model.priceMax) ?? priceMax ?? Math.ceil(price.end),
+          }),
+          Html.blur(minRef, () => doneMessage),
+          Html.blur(maxRef, () => doneMessage),
         )
       },
       RatingMoved: ({ end, value }) => {
-        const min = edits.ratingMin ?? ratingMin ?? ratingFacet.start
-        const max = edits.ratingMax ?? ratingMax ?? ratingFacet.end
+        const { max, min } = ratingRange(model, route)
         // One thumb can't pass the other
         return end === "min"
-          ? { ...edits, ratingMin: Math.min(value, max), ratingMax: max }
-          : { ...edits, ratingMin: min, ratingMax: Math.max(value, min) }
+          ? { ...model, ratingMin: Math.min(value, max), ratingMax: max }
+          : { ...model, ratingMin: min, ratingMax: Math.max(value, min) }
       },
       RatingReleased: () => {
-        const min = edits.ratingMin ?? ratingMin ?? ratingFacet.start
-        const max = edits.ratingMax ?? ratingMax ?? ratingFacet.end
+        const { max, min } = ratingRange(model, route)
         return ratingMin === min && ratingMax === max
-          ? edits
-          : $.set(edits).run(
-              Router.patchQuery(AppRoute, route, {
-                ratingMin: min,
-                ratingMax: max,
-              }).pipe(done),
-            )
+          ? model
+          : $.run(patch({ ratingMin: min, ratingMax: max }))
       },
       Cleared: ({ filter }) =>
         filter === "price"
-          ? $.set({ ...edits, priceMin: null, priceMax: null }).run(
-              Router.patchQuery(AppRoute, route, {
-                priceMin: undefined,
-                priceMax: undefined,
-              }).pipe(done),
+          ? $.set({ ...model, priceMin: null, priceMax: null }).run(
+              patch({ priceMin: undefined, priceMax: undefined }),
             )
-          : $.set({ ...edits, ratingMin: null, ratingMax: null }).run(
-              Router.patchQuery(AppRoute, route, {
-                ratingMin: undefined,
-                ratingMax: undefined,
-              }).pipe(done),
+          : $.set({ ...model, ratingMin: null, ratingMax: null }).run(
+              patch({ ratingMin: undefined, ratingMax: undefined }),
             ),
-      Done: () => edits,
+      Done: () => model,
     })
   },
   view: (model, h) => {
     const { price, route } = h.props
-    const edits = editsFor(model, route)
     const { priceMax, priceMin, ratingMax, ratingMin } = route.query
 
     const heading = (name: string, filter: "price" | "rating", set: boolean) =>
@@ -178,7 +157,7 @@ export const Filters = Component.define({
       )
 
     const priceInput = (end: "min" | "max", range: FacetRange) => {
-      const edit = end === "min" ? edits.priceMin : edits.priceMax
+      const edit = end === "min" ? model.priceMin : model.priceMax
       const applied = end === "min" ? priceMin : priceMax
       return h.input
         .ref(end === "min" ? minRef : maxRef)
@@ -235,8 +214,7 @@ export const Filters = Component.define({
             ),
         )
 
-    const low = edits.ratingMin ?? ratingMin ?? ratingFacet.start
-    const high = edits.ratingMax ?? ratingMax ?? ratingFacet.end
+    const { max: high, min: low } = ratingRange(model, route)
     const span = ratingFacet.end - ratingFacet.start
     // Where a thumb's centre sits: a native thumb stays inside the track, so
     // it travels the track's width less its own

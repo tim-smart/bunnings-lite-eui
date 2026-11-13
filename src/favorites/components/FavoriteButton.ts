@@ -50,7 +50,7 @@ export const FavoriteButtonNoDeps = Component.define({
       Toggled: () =>
         $.run(
           ToggleFavorite.make({ product: $.props.product }).pipe(
-            Command.map(() => FavoriteButtonMessage.make({ _tag: "Saved" })),
+            Command.as(FavoriteButtonMessage.make({ _tag: "Saved" })),
           ),
         ),
       Saved: () => model,

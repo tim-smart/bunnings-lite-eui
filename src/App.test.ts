@@ -2,11 +2,18 @@ import "effect/ui/html/register"
 import { assert, describe, it } from "@effect/vitest"
 import { Query, Story } from "effect/ui/testing"
 import { HtmlQuery } from "effect/ui/html/testing"
-import { AppNoDeps, FinishJoin, ReloadPage } from "./App.ts"
+import { AppMessage, AppNoDeps, FinishJoin, ReloadPage } from "./App.ts"
 import type { AppRoute } from "./routes.ts"
 import { JoinFailed } from "./sync/domain/Invite.ts"
 
-const route: AppRoute = { _tag: "Search", params: {}, query: { query: "" } }
+const search = (query: string): AppRoute => ({
+  _tag: "Search",
+  params: {},
+  query: { query },
+})
+const route = search("")
+const routeChanged = (query: string) =>
+  AppMessage.make({ _tag: "RouteChanged", route: search(query) })
 
 describe("App", () => {
   it("holds the shell back until a pending join has finished", () => {
@@ -36,6 +43,27 @@ describe("App", () => {
         .click(HtmlQuery.role("button", { name: "Retry" }))
         .expectExact(ReloadPage)
         .resolve(ReloadPage, undefined),
+    )
+  })
+
+  it("counts every clear to home, including one that is never rendered", () => {
+    Story.make(AppNoDeps, { route: search("hammer") }, (s) =>
+      s
+        // Cleared and searched again before the next render
+        .send(routeChanged(""))
+        .send(routeChanged("drill"))
+        .model((model) => assert.strictEqual(model.searchesCleared, 1))
+        .end(FinishJoin),
+    )
+  })
+
+  it("keeps the search page when a search starts from home", () => {
+    Story.make(AppNoDeps, { route }, (s) =>
+      s
+        .send(routeChanged("h"))
+        .send(routeChanged("hammer"))
+        .model((model) => assert.strictEqual(model.searchesCleared, 0))
+        .end(FinishJoin),
     )
   })
 })

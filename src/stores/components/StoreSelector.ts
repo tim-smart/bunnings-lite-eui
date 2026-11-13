@@ -1,7 +1,6 @@
 import { Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Command, Component } from "effect/ui"
-import { Html } from "effect/ui/html"
 import {
   SessionLocation,
   type Store,
@@ -20,10 +19,6 @@ export const StoreSelectorMessage = Schema.TaggedUnion({
   /** The store the search came back with, or none when it was closed. */
   SearchAnswered: { store: Schema.Option(SessionLocation) },
   Done: {},
-  CurrentChanged: {
-    /** The code of the store the session has, once it is known. */
-    code: Schema.NullOr(Schema.String),
-  },
 })
 const Message = StoreSelectorMessage
 
@@ -34,6 +29,10 @@ export class ChooseStore extends Command.Service<ChooseStore>()(
     args: { location: SessionLocation },
     // Prices and stock are per store
     invalidates: () => [SessionTag],
+    // Shown as the store at once, until the session has it too
+    optimistic: ({ location }) => [
+      CurrentStore.patch({}, () => Option.some(location)),
+    ],
   },
   Effect.gen(function* () {
     const session = yield* Session
@@ -54,9 +53,7 @@ export class SearchAllStores extends Command.Service<SearchAllStores>()(
   }),
 ) {}
 
-const searchButtonRef = Html.ref("store-search-open", "button")
-
-const done = Command.map(() => Message.make({ _tag: "Done" }))
+const done = Command.as(Message.make({ _tag: "Done" }))
 
 /**
  * Chooses the store to shop at: from the ten nearest, which asks for the
@@ -74,23 +71,10 @@ export const StoreSelectorNoDeps = Component.define({
   model: Schema.Struct({
     /** Whether the nearby stores have been asked for. */
     nearbyWanted: Schema.Boolean,
-    /** The store just chosen, until the session has it too. */
-    chosen: Schema.NullOr(SessionLocation),
   }),
   message: Message,
   loaders: {
-    current: {
-      load: CurrentStore,
-      args: () => ({}),
-      onChange: (result) =>
-        Message.make({
-          _tag: "CurrentChanged",
-          code: Option.match(Option.flatten(AsyncResult.value(result)), {
-            onNone: () => null,
-            onSome: (location) => location.code,
-          }),
-        }),
-    },
+    current: { load: CurrentStore, args: () => ({}) },
     // Asking for nearby stores asks for the device's location, so it waits
     // until the picker is reached for
     nearby: {
@@ -99,18 +83,13 @@ export const StoreSelectorNoDeps = Component.define({
     },
   },
 }).make({
-  init: () => ({
-    nearbyWanted: false,
-    chosen: null,
-  }),
+  init: () => ({ nearbyWanted: false }),
   update: (model, message, $) =>
     Message.match(message, {
       Reached: () =>
         model.nearbyWanted ? model : { ...model, nearbyWanted: true },
       StoreChosen: ({ location }) =>
-        $.set({ ...model, chosen: location }).run(
-          ChooseStore.make({ location }).pipe(done),
-        ),
+        $.run(ChooseStore.make({ location }).pipe(done)),
       SearchOpened: () =>
         $.run(
           SearchAllStores.make().pipe(
@@ -119,29 +98,17 @@ export const StoreSelectorNoDeps = Component.define({
             ),
           ),
         ),
-      // The page is live again by now, so its button can take focus back
-      SearchAnswered: ({ store }) => {
-        const refocus = Html.focus(searchButtonRef, () =>
-          Message.make({ _tag: "Done" }),
-        )
-        return Option.match(store, {
-          onNone: () => $.run(refocus),
+      // The host hands focus back to the button that opened the search
+      SearchAnswered: ({ store }) =>
+        Option.match(store, {
+          onNone: () => model,
           onSome: (location) =>
-            $.set({ ...model, chosen: location }).run(
-              ChooseStore.make({ location }).pipe(done),
-              refocus,
-            ),
-        })
-      },
+            $.run(ChooseStore.make({ location }).pipe(done)),
+        }),
       Done: () => model,
-      CurrentChanged: ({ code }) => ({
-        ...model,
-        chosen: model.chosen?.code === code ? null : model.chosen,
-      }),
     }),
   view: (model, h) => {
-    const current = Option.flatten(AsyncResult.value(h.loaded.current))
-    const shown = model.chosen === null ? current : Option.some(model.chosen)
+    const shown = Option.flatten(AsyncResult.value(h.loaded.current))
     const isShown = (code: string) =>
       Option.exists(shown, (location) => location.code === code)
 
@@ -230,7 +197,6 @@ export const StoreSelectorNoDeps = Component.define({
           .class("text-sm text-muted-foreground")
           .children(nearbyStatus),
         h.button
-          .ref(searchButtonRef)
           .attr("type", "button")
           .class(
             "ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-primary/15",

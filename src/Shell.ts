@@ -1,10 +1,9 @@
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { EventLog } from "effect/eventlog"
 import { AsyncResult } from "effect/reactivity"
-import { Command, Component, Router, Subscription } from "effect/ui"
+import { Command, Component, Head, Router, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { SessionLocation } from "../server/src/domain/Bunnings.ts"
-import { Viewport } from "./browser/services/Viewport.ts"
 import { buttonClass, inputClass } from "./design/classes.ts"
 import { icon } from "./design/icons.ts"
 import { ListFavoritesRefresh } from "./favorites/loaders/ListFavorites.ts"
@@ -38,16 +37,6 @@ export const ShellMessage = Schema.TaggedUnion({
 })
 const Message = ShellMessage
 
-/** Scrolls the page back to its top. */
-export class ScrollToTop extends Command.Service<ScrollToTop>()(
-  "Shell/ScrollToTop",
-  { args: {} },
-  Effect.gen(function* () {
-    const viewport = yield* Viewport
-    return () => viewport.scrollToTop
-  }),
-) {}
-
 /**
  * Answers the store selector's search of every store with the store the
  * drawer came back with, or with none.
@@ -76,14 +65,14 @@ const storeSearchAskedSubscription = Subscription.make(
   ),
 )
 
+const headerRef = Html.ref("header", "header")
 const searchRef = Html.ref("search", "input")
 const syncSettingsRef = Html.ref("sync-settings-open", "button")
 
-const done = Command.map(() => Message.make({ _tag: "Done" }))
+const doneMessage = Message.make({ _tag: "Done" })
+const done = Command.as(doneMessage)
 
-const focusSyncSettings = Html.focus(syncSettingsRef, () =>
-  Message.make({ _tag: "Done" }),
-)
+const focusSyncSettings = Html.focus(syncSettingsRef, () => doneMessage)
 const noStoreFound = AnswerStoreSearch.make({ store: Option.none() }).pipe(done)
 
 /** Which drawer is open, if any. Only one is open at a time. */
@@ -135,15 +124,6 @@ const searchTyped = ShellDef.update("SearchTyped", (_model, { text }, $) => {
         ).pipe(done),
       )
 })
-
-// The page is live again in the render that focus waits for
-const syncSettingsClosed = ShellDef.update(
-  "SyncSettingsClosed",
-  (model, _message, $) =>
-    model.drawer === "syncSettings"
-      ? $.set({ ...model, drawer: null }).run(focusSyncSettings)
-      : model,
-)
 
 // An invite takes the place of whichever drawer is open
 const inviteChanged = ShellDef.update("InviteChanged", (model, { open }, $) => {
@@ -280,6 +260,7 @@ const header = ShellDef.fragment((h) => {
     (AsyncResult.isInitial(h.loaded.results) || h.loaded.results.waiting)
 
   return h.header
+    .ref(headerRef)
     .class("px-3 sm:px-6 text-white")
     .children(
       h.div
@@ -343,7 +324,8 @@ const page = ShellDef.fragment((h, route: AppRoute) => {
     Search: (route) =>
       h.child(SearchPage, {
         // A new search page for each search after clearing to home, so it
-        // can't show the last search's results while the next one loads
+        // can't show the last search's results while the next one loads. A
+        // search started from home keeps the page, so it is still debounced.
         key: `search:${h.props.searchesCleared}`,
         props: { route },
         onEmit: () => Message.make({ _tag: "SearchWanted" }),
@@ -417,25 +399,30 @@ export const ShellNoDeps = ShellDef.make({
   update: {
     SearchTyped: searchTyped,
     SearchSubmitted: (_model, _message, $) =>
-      $.run(Html.blur(searchRef, () => Message.make({ _tag: "Done" }))),
+      $.run(Html.blur(searchRef, () => doneMessage)),
     SearchWanted: (_model, _message, $) =>
       $.run(
-        Html.focus(searchRef, () => Message.make({ _tag: "Done" }), {
-          preventScroll: true,
+        Html.focus(searchRef, () => doneMessage, { preventScroll: true }),
+        Html.scrollIntoView(headerRef, () => doneMessage, {
+          behavior: "smooth",
+          block: "start",
         }),
-        ScrollToTop.make().pipe(done),
       ),
     SyncSettingsOpened: (model) =>
       model.drawer === null
         ? { ...model, drawer: "syncSettings" as const }
         : model,
-    SyncSettingsClosed: syncSettingsClosed,
+    // The host hands focus back to the button that opened it
+    SyncSettingsClosed: (model) =>
+      model.drawer === "syncSettings" ? { ...model, drawer: null } : model,
     InviteChanged: inviteChanged,
     StoreSearchAsked: storeSearchAsked,
     StoreSearchAnswered: storeSearchAnswered,
     Done: (model) => model,
   },
   subscriptions: () => [storeSearchAskedSubscription],
+  head: (_model, { route }) =>
+    route._tag === "NotFound" ? [Head.title("Page not found")] : [],
   view: shellView,
 })
 
@@ -458,7 +445,6 @@ export const Shell = ShellNoDeps.pipe(
   Component.provide(
     Layer.mergeAll(
       SearchProducts.layer,
-      ScrollToTop.layer,
       AnswerStoreSearch.layer,
       ListFavoritesRefresh,
     ).pipe(Layer.provideMerge(Shared)),

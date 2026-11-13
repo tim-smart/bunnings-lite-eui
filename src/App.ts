@@ -46,7 +46,8 @@ export const AppNoDeps = Component.define({
     /**
      * How many times the search has been cleared back to the home page. The
      * search page starts over each time, without the last search's results.
-     * It is counted here because every route change passes through `update`.
+     * It is counted here because every route change passes through `update`,
+     * including a clear that is never rendered.
      */
     searchesCleared: Schema.Number,
     join: Schema.Literals(["Checking", "Blocked", "Failed", "Ready"]),
@@ -80,7 +81,7 @@ export const AppNoDeps = Component.define({
       Retry: () =>
         $.run(
           ReloadPage.make().pipe(
-            Command.map(() => AppMessage.make({ _tag: "Reloading" })),
+            Command.as(AppMessage.make({ _tag: "Reloading" })),
           ),
         ),
       Reloading: () => model,
@@ -90,7 +91,12 @@ export const AppNoDeps = Component.define({
       AppMessage.make({ _tag: "RouteChanged", route }),
     ),
   ],
-  head: () => [Head.lang("en")],
+  // A page names itself, and the app's name follows it
+  head: () => [
+    Head.title("Bunnings Lite"),
+    Head.titleTemplate((title) => `${title} · Bunnings Lite`),
+    Head.lang("en"),
+  ],
   view: (model, h) => {
     switch (model.join) {
       case "Ready":

@@ -1,14 +1,10 @@
 import { Schema } from "effect"
-import {
-  Facet,
-  ProductBaseInfo,
-  type SearchResponseData,
-} from "../../../server/src/domain/Bunnings.ts"
+import { Facet, ProductBaseInfo } from "../../../server/src/domain/Bunnings.ts"
 import type { AppRoute } from "../../routes.ts"
 
 /** The two ends of a price or rating filter. */
-export const Range = Schema.Tuple([Schema.Finite, Schema.Finite])
-export type Range = typeof Range.Type
+const Range = Schema.Tuple([Schema.Finite, Schema.Finite])
+type Range = typeof Range.Type
 
 export const SearchArgs = Schema.Struct({
   query: Schema.String,
@@ -51,24 +47,13 @@ export const searchCleared = (from: AppRoute, to: AppRoute): boolean =>
 /** How long the search waits for typing to stop. */
 export const searchDebounce = "150 millis"
 
-/** A page of results, with the search text it answers. */
+/** A page of results. */
 export const ResultsPage = Schema.Struct({
-  query: Schema.String,
   totalCount: Schema.Number,
   facets: Schema.Array(Facet),
   results: Schema.Array(ProductBaseInfo),
 })
 export type ResultsPage = typeof ResultsPage.Type
-
-export const resultsPage = (
-  query: string,
-  data: SearchResponseData,
-): ResultsPage => ({
-  query,
-  totalCount: data.totalCount,
-  facets: data.facets,
-  results: data.results,
-})
 
 /** The lowest and highest value a filter can take for a search. */
 export const FacetRange = Schema.Struct({
@@ -77,7 +62,7 @@ export const FacetRange = Schema.Struct({
 })
 export type FacetRange = typeof FacetRange.Type
 
-/** The range of prices among a page's search, when the server reports one. */
+/** The range of prices in a page's search, when the server reports one. */
 export const priceFacet = (page: ResultsPage): FacetRange | null => {
   const value = page.facets.find((facet) => facet.facetId === "@price")
     ?.values[0]
