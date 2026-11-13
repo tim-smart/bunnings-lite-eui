@@ -1,6 +1,6 @@
-import { Cause, Layer, Option, Schema } from "effect"
+import { Cause, Layer, Option, Schema, Stream } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Component } from "effect/ui"
+import { Component, Subscription } from "effect/ui"
 import type { ProductBaseInfo } from "../../server/src/domain/Bunnings.ts"
 import { InstallButton } from "../browser/components/InstallButton.ts"
 import { bottomReached, scrolledPast } from "../browser/subscriptions.ts"
@@ -33,8 +33,15 @@ export const SearchPageMessage = Schema.TaggedUnion({
   BottomReached: {},
   Scrolled: { scrolled: Schema.Boolean },
   SearchWanted: {},
+  WentHome: {},
 })
 const Message = SearchPageMessage
+
+/** Sends `WentHome` each time the page shows home instead of results. */
+const wentHome = Subscription.make(
+  "search/wentHome",
+  Stream.make(Message.make({ _tag: "WentHome" })),
+)
 
 /** Asks whoever holds the search box to bring it back into reach. */
 export const SearchPageEvents = Schema.TaggedUnion({ SearchWanted: {} })
@@ -57,6 +64,11 @@ export const SearchPageNoDeps = Component.define({
      */
     facets: Schema.NullOr(Facets),
     scrolled: Schema.Boolean,
+    /**
+     * Whether the results the loader still holds are from before the page
+     * last went home. A new search doesn't show them while it loads.
+     */
+    stale: Schema.Boolean,
   }),
   message: Message,
   events: SearchPageEvents,
@@ -79,7 +91,7 @@ export const SearchPageNoDeps = Component.define({
     },
   },
 }).make({
-  init: () => ({ facets: null, scrolled: false }),
+  init: () => ({ facets: null, scrolled: false, stale: false }),
   update: (model, message, $) =>
     Message.match(message, {
       ResultsChanged: ({ facets }) => ({
@@ -88,6 +100,8 @@ export const SearchPageNoDeps = Component.define({
           facets !== null && facets.query !== model.facets?.query
             ? facets
             : model.facets,
+        // Facets come with the first results of the search
+        stale: model.stale && facets === null,
       }),
       // Only when there is a next page that nothing is loading yet
       BottomReached: () =>
@@ -100,10 +114,12 @@ export const SearchPageNoDeps = Component.define({
       Scrolled: ({ scrolled }) => ({ ...model, scrolled }),
       SearchWanted: () =>
         $.set(model).emit(SearchPageEvents.make({ _tag: "SearchWanted" })),
+      // The next search starts over: no results or filters from the last one
+      WentHome: () => ({ ...model, facets: null, stale: true }),
     }),
   subscriptions: (_model, props) => [
     ...(searchArgs(props.route) === undefined
-      ? []
+      ? [wentHome]
       : [
           bottomReached(Message.make({ _tag: "BottomReached" })),
           scrolledPast(200, (scrolled) =>
@@ -154,6 +170,8 @@ export const SearchPageNoDeps = Component.define({
     const skeletons = () =>
       h.div
         .class(gridClass)
+        .attr("role", "status")
+        .attr("aria-label", "Loading results")
         .children(
           [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
             h.div
@@ -199,9 +217,10 @@ export const SearchPageNoDeps = Component.define({
           )
 
     const results = AsyncResult.match(h.loaded.results, {
-      // The last results stay up while the next ones load
+      // The last results stay up while the next ones load, unless the page
+      // went home since
       onInitial: () =>
-        Option.match(h.previous.results, {
+        Option.match(model.stale ? Option.none() : h.previous.results, {
           onNone: skeletons,
           onSome: ({ items }) => grid(items),
         }),
