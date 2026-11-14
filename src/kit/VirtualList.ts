@@ -1,6 +1,7 @@
 import { Effect, Option, Schema, Stream } from "effect"
 import { Command, Component, Renderer, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
+import { ElementSize } from "../browser/services/ElementSize.ts"
 import { Viewport } from "../browser/services/Viewport.ts"
 
 const Props = Schema.Struct({
@@ -15,6 +16,12 @@ const Props = Schema.Struct({
    * fill the first screen. One row and its overscan when omitted.
    */
   initialCount: Schema.optional(Schema.Finite),
+  /**
+   * A name for the items the list shows, such as the search they answer.
+   * Row heights are remembered by row, so the list drops them when the name
+   * changes. Leave it out and they are kept.
+   */
+  dataset: Schema.optional(Schema.String),
 })
 type Props = typeof Props.Type
 
@@ -23,6 +30,8 @@ const Model = Schema.Struct({
   visible: Schema.NullOr(
     Schema.Struct({ first: Schema.Finite, last: Schema.Finite }),
   ),
+  /** The height of the window. */
+  viewport: Schema.Finite,
   /** How many items share a row. */
   lanes: Schema.Finite,
   /** The space between two rows. */
@@ -31,31 +40,44 @@ const Model = Schema.Struct({
   width: Schema.Finite,
   /** The measured height of each row, by row index. */
   sizes: Schema.Record(Schema.String, Schema.Finite),
+  /** The `dataset` the rows were measured for. */
+  dataset: Schema.NullOr(Schema.String),
+  /** The item that has the keyboard focus, or something in it has. */
+  focused: Schema.NullOr(Schema.Finite),
 })
 type Model = typeof Model.Type
 
+/** Items from `start` up to `end`. */
+const Range = Schema.Struct({ start: Schema.Finite, end: Schema.Finite })
+
 /** What `Measure` read from the page, in pixels relative to the window. */
 const Measurement = Schema.Struct({
-  /** The height of the window. */
-  viewport: Schema.Finite,
   list: Schema.Struct({ top: Schema.Finite, width: Schema.Finite }),
   /** The rendered items, in order. */
   items: Schema.Array(
     Schema.Struct({
       index: Schema.Finite,
       top: Schema.Finite,
+      left: Schema.Finite,
       height: Schema.Finite,
     }),
   ),
 })
 type Measurement = typeof Measurement.Type
 
-export const VirtualListMessage = Schema.TaggedUnion({
-  /** The window scrolled or changed size, or the list got another count. */
+const Message = Schema.TaggedUnion({
+  /** The window scrolled or changed size, or the list got other items. */
   Moved: { viewport: Schema.Finite },
+  /** The list's own box changed size: a row got taller, or the list narrower. */
+  Resized: {},
   Measured: Measurement.fields,
+  /** The focus went to an item, or to something in it. */
+  Focused: { index: Schema.Finite },
+  /** The focus left an item, perhaps for another one. */
+  Blurred: { index: Schema.Finite },
+  /** The focus left an item and no item got it. */
+  Unfocused: { index: Schema.Finite },
 })
-const Message = VirtualListMessage
 
 const List = Html.ref("VirtualList.list", "div")
 const Item = Html.ref("VirtualList.item", "div")
@@ -69,6 +91,12 @@ const defaultOverscan = 3
 // Boxes are fractions of a pixel, and the same box can differ by a rounding
 // error from one read to the next.
 const same = (a: number, b: number) => Math.abs(a - b) < 0.5
+
+/** The Model without what it learned about the items of another dataset. */
+const current = (model: Model, props: Props): Model =>
+  props.dataset === undefined || props.dataset === model.dataset
+    ? model
+    : { ...model, dataset: props.dataset, sizes: {}, focused: null }
 
 interface Layout {
   readonly rows: number
@@ -106,12 +134,16 @@ const rowAt = (layout: Layout, y: number): number => {
 }
 
 interface Window {
-  /** The first item to render, and the one after the last. */
-  readonly start: number
-  readonly end: number
+  /**
+   * The items to render. There are two ranges when the focused item is away
+   * from the window: its rows, and the window's.
+   */
+  readonly ranges: ReadonlyArray<typeof Range.Type>
   /** The room the rows before and after them take. */
   readonly before: number
   readonly after: number
+  /** The room the rows between two ranges take. */
+  readonly between: number
 }
 
 const windowOf = (model: Model, props: Props): Window => {
@@ -133,16 +165,42 @@ const windowOf = (model: Model, props: Props): Window => {
     endRow = Math.min(model.visible.last, lastRow) + overscan + 1
   }
   endRow = Math.min(layout.rows, endRow)
+
+  const rows = [[startRow, endRow]]
+  if (model.focused !== null && model.focused < props.count) {
+    // An element that is removed loses the focus, so the focused item stays
+    // however far the window goes. The rows next to it stay too: Tab and
+    // Shift+Tab then go where they would if every item were rendered.
+    const row = Math.floor(model.focused / model.lanes)
+    const kept = [Math.max(0, row - 1), Math.min(layout.rows, row + 2)]
+    if (kept[1] < startRow) rows.unshift(kept)
+    else if (kept[0] > endRow) rows.push(kept)
+    else rows[0] = [Math.min(startRow, kept[0]), Math.max(endRow, kept[1])]
+  }
+
+  const last = rows[rows.length - 1][1]
   return {
-    start: startRow * model.lanes,
-    end: Math.min(props.count, endRow * model.lanes),
-    before: layout.offsets[startRow],
+    ranges: rows.map(([start, end]) => ({
+      start: start * model.lanes,
+      end: Math.min(props.count, end * model.lanes),
+    })),
+    before: layout.offsets[rows[0][0]],
     // A gap is counted under every row, and the last row has none
     after:
-      endRow === layout.rows
+      last === layout.rows
         ? 0
-        : layout.offsets[layout.rows] - layout.offsets[endRow],
+        : layout.offsets[layout.rows] - layout.offsets[last],
+    between:
+      rows.length === 1
+        ? 0
+        : layout.offsets[rows[1][0]] - layout.offsets[rows[0][1]],
   }
+}
+
+/** How many lanes the items sit in: the number of left edges they have. */
+const lanesOf = (items: Measurement["items"]): number => {
+  const lefts = items.map((item) => item.left).sort((a, b) => a - b)
+  return lefts.filter((left, i) => i === 0 || !same(left, lefts[i - 1])).length
 }
 
 /**
@@ -152,7 +210,7 @@ const windowOf = (model: Model, props: Props): Window => {
 const measured = (
   model: Model,
   props: Props,
-  { items, list, viewport }: Measurement,
+  { items, list }: Measurement,
 ): Model => {
   // A list that isn't shown has no boxes to learn from
   if (list.width === 0) return model
@@ -161,40 +219,78 @@ const measured = (
   let changed = !same(list.width, model.width)
   let sizes: Record<string, number> = changed ? {} : { ...model.sizes }
 
-  if (items.length > 0) {
-    // Items on one row share a top. A single row with no more items than
-    // the lanes already known changes nothing: it may be a last row with
-    // room left.
-    const across = items.findIndex((item) => !same(item.top, items[0].top))
-    const measuredLanes = across === -1 ? items.length : across
-    if ((across !== -1 || items.length > lanes) && measuredLanes !== lanes) {
-      lanes = measuredLanes
-      sizes = {}
-      changed = true
-    }
-    // The items only split into the list's rows when the first starts one
-    if (items[0].index % lanes === 0) {
-      const firstRow = items[0].index / lanes
-      const rows: Array<{ readonly top: number; readonly bottom: number }> = []
-      for (let i = 0; i < items.length; i += lanes) {
-        const row = items.slice(i, i + lanes)
-        rows.push({
-          top: row[0].top,
-          bottom: Math.max(...row.map((item) => item.top + item.height)),
-        })
+  // Items that fit in the lanes already known may be a last row with room
+  // left, which says nothing about the lanes
+  const measuredLanes = lanesOf(items)
+  const lanesChanged =
+    items.length > 0 &&
+    measuredLanes !== lanes &&
+    (measuredLanes < items.length || measuredLanes > lanes)
+  if (lanesChanged) {
+    lanes = measuredLanes
+    sizes = {}
+    changed = true
+  }
+  // The first row of a second range is pushed down by a margin. When the
+  // lanes change, the items were rendered for other rows than the ones they
+  // are in now, and a row can hold items with and without the margin: its
+  // height says nothing then.
+  const apart = items.some(
+    (item, i) => i > 0 && item.index !== items[i - 1].index + 1,
+  )
+  if (!(lanesChanged && apart)) {
+    const rows = new Map<
+      number,
+      {
+        top: number
+        bottom: number
+        minBottom: number
+        maxTop: number
+        n: number
       }
-      if (rows.length > 1 && !same(rows[1].top - rows[0].bottom, gap)) {
-        gap = rows[1].top - rows[0].bottom
+    >()
+    for (const item of items) {
+      const index = Math.floor(item.index / lanes)
+      const bottom = item.top + item.height
+      const row = rows.get(index)
+      if (row === undefined) {
+        rows.set(index, {
+          top: item.top,
+          bottom,
+          minBottom: bottom,
+          maxTop: item.top,
+          n: 1,
+        })
+      } else {
+        row.top = Math.min(row.top, item.top)
+        row.bottom = Math.max(row.bottom, bottom)
+        row.minBottom = Math.min(row.minBottom, bottom)
+        row.maxTop = Math.max(row.maxTop, item.top)
+        row.n++
+      }
+    }
+    let gapFound = false
+    for (const [index, row] of rows) {
+      // Only a row with all its items, side by side, has the row's height
+      const length = Math.min(lanes, props.count - index * lanes)
+      if (row.n !== length || row.maxTop >= row.minBottom) {
+        rows.delete(index)
+        continue
+      }
+      const size = row.bottom - row.top
+      const known = sizes[index]
+      if (known === undefined || !same(known, size)) {
+        sizes[index] = size
         changed = true
       }
-      rows.forEach((row, i) => {
-        const size = row.bottom - row.top
-        const current = sizes[firstRow + i]
-        if (current === undefined || !same(current, size)) {
-          sizes[firstRow + i] = size
+      const above = rows.get(index - 1)
+      if (!gapFound && above !== undefined) {
+        gapFound = true
+        if (!same(row.top - above.bottom, gap)) {
+          gap = row.top - above.bottom
           changed = true
         }
-      })
+      }
     }
   }
 
@@ -205,7 +301,7 @@ const measured = (
       ? null
       : {
           first: rowAt(layout, -list.top),
-          last: rowAt(layout, viewport - list.top),
+          last: rowAt(layout, model.viewport - list.top),
         }
   return !changed &&
     visible?.first === model.visible?.first &&
@@ -215,49 +311,84 @@ const measured = (
 }
 
 // ---------------------------------------------------------------------------
-// component
+// commands
 // ---------------------------------------------------------------------------
 
 /**
- * Reads the boxes of the list and of the items from `start` up to `end`,
- * once the render that asked for it is committed. It answers with nothing
- * when the list isn't rendered.
+ * Reads the boxes of the list and of the items in `ranges`, once the render
+ * that asked for it is committed. It answers with nothing when the list
+ * isn't rendered.
  */
-export const Measure = Command.make(
+const Measure = Command.make(
   "VirtualList.measure",
-  {
-    args: {
-      viewport: Schema.Finite,
-      start: Schema.Finite,
-      end: Schema.Finite,
-    },
-  },
-  Effect.fnUntraced(function* ({ end, start, viewport }) {
+  { args: { ranges: Schema.Array(Range) } },
+  Effect.fnUntraced(function* ({ ranges }) {
     const refs = yield* Renderer.Refs
     const host = yield* Html.Host
     const list = yield* refs.lookup(List)
     if (Option.isNone(list)) return Component.noop
     const { top, width } = host.measure(list.value)
     const items: Array<Measurement["items"][number]> = []
-    for (let index = start; index < end; index++) {
-      const item = yield* refs.lookup(Item.at(index))
-      if (Option.isNone(item)) continue
-      const box = host.measure(item.value)
-      items.push({ index, top: box.top, height: box.height })
+    for (const { end, start } of ranges) {
+      for (let index = start; index < end; index++) {
+        const item = yield* refs.lookup(Item.at(index))
+        if (Option.isNone(item)) continue
+        const box = host.measure(item.value)
+        items.push({ index, top: box.top, left: box.left, height: box.height })
+      }
     }
-    return Message.make({
-      _tag: "Measured",
-      viewport,
-      list: { top, width },
-      items,
-    })
+    return Message.make({ _tag: "Measured", list: { top, width }, items })
   }),
 )
 
-const measure = (model: Model, props: Props, viewport: number) => {
-  const { end, start } = windowOf(model, props)
-  return Measure({ viewport, start, end })
-}
+const measure = (model: Model, props: Props) =>
+  Measure({ ranges: windowOf(model, props).ranges })
+
+/**
+ * Follows the size of the list element: it changes when a rendered row gets
+ * taller or shorter, and when the list gets wider or narrower. It ends at
+ * once when the list isn't rendered, and one that is running is enough, so a
+ * second one is dropped.
+ */
+export class ObserveSize extends Command.Service<ObserveSize>()(
+  "VirtualList.observe",
+  { args: {}, stream: true, mode: "drop" },
+  Effect.gen(function* () {
+    const size = yield* ElementSize
+    return () =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          const refs = yield* Renderer.Refs
+          const list = yield* refs.lookup(List)
+          return Option.match(list, {
+            onNone: () => Stream.empty,
+            onSome: (element) =>
+              Stream.map(size.changes(element), () =>
+                Message.make({ _tag: "Resized" }),
+              ),
+          })
+        }),
+      )
+  }),
+) {}
+
+/**
+ * Answers a moment after the focus left an item. The browser says that it
+ * left one item before it says that another got it, and in between the item
+ * it is going to must not be removed.
+ */
+const FocusLeft = Command.make(
+  "VirtualList.focusLeft",
+  { args: { index: Schema.Finite }, mode: "switch" },
+  ({ index }) =>
+    Effect.sleep("1 millis").pipe(
+      Effect.as(Message.make({ _tag: "Unfocused", index })),
+    ),
+)
+
+// ---------------------------------------------------------------------------
+// component
+// ---------------------------------------------------------------------------
 
 /**
  * A list that renders only the items near the window, and leaves room for
@@ -268,19 +399,40 @@ const measure = (model: Model, props: Props, viewport: number) => {
  * and `item` to a `div` for each index in `items`, in order and with nothing
  * between them, and looks up what to draw in each by its index.
  *
- * The list element can be a block, a flex column or a CSS grid. Nothing
- * about its layout is passed in: the component reads it from the boxes of
- * the items it rendered. That gives how many sit side by side, how tall each
- * row is and the gap between rows, so a grid needs no column count. A row
- * that hasn't been rendered yet takes the average of the ones that have.
+ * **The layout it supports**
  *
- * The `list` part sets the element's `style`, so the padding above and below
- * the items is the part's. An item's index changes when items are added
- * before it, so key each item's element by the item's own id.
+ * Nothing about the layout is passed in: the component reads it from the
+ * boxes of the items it rendered. It takes the list to be rows of items:
  *
- * It follows the window through `Viewport`, and measures on a scroll, a
- * resize and a change of `count`. A row that changes height at any other
- * time is noticed at the next of those.
+ * - Every item takes one cell. Each row has as many items as the others,
+ *   but for the last, and the items of a lane have the same left edge.
+ * - Rows are as tall as their tallest item and can differ from each other.
+ *   A row that hasn't been rendered takes the average of the ones that have.
+ * - The space between rows is the list's `gap`, and the same everywhere.
+ *
+ * A block, a flex column and a CSS grid with equal columns are such lists,
+ * and a grid needs no column count: the lanes follow its breakpoints. Items
+ * that span cells, masonry and wrapping items of unequal widths are not.
+ *
+ * The parts set `style` on the list and on some items, for the padding and
+ * margin that stand in for the rows left out, so those are the parts'. An
+ * item's index changes when items are added before it, so key each item's
+ * element by the item's own id.
+ *
+ * **What it follows**
+ *
+ * It measures on a scroll and a resize of the window, through `Viewport`,
+ * and when the list element changes size, through `ElementSize`: that is
+ * when a rendered row grows or shrinks. When `count` or `dataset` changes
+ * it measures again. A row keeps the height it was last measured at while
+ * it isn't rendered, so one that changed since is corrected when the window
+ * comes back to it.
+ *
+ * A headless component can't provide Layers, so the component that renders
+ * the list provides `ObserveSize.layer`.
+ *
+ * The item that has the keyboard focus stays rendered with the rows next to
+ * it, wherever the window is.
  */
 export const VirtualList = Component.define({
   name: "VirtualList",
@@ -289,40 +441,75 @@ export const VirtualList = Component.define({
   message: Message,
   elements: Html,
 }).make({
-  init: () => ({ visible: null, lanes: 1, gap: 0, width: 0, sizes: {} }),
-  update: (model, message, $) =>
-    Message.match(message, {
-      Moved: ({ viewport }) => $.run(measure(model, $.props, viewport)),
+  init: ($) => ({
+    visible: null,
+    viewport: 0,
+    lanes: 1,
+    gap: 0,
+    width: 0,
+    sizes: {},
+    dataset: $.props.dataset ?? null,
+    focused: null,
+  }),
+  update: (stored, message, $) => {
+    const model = current(stored, $.props)
+    return Message.match(message, {
+      Moved: ({ viewport }) => {
+        const next =
+          viewport === model.viewport ? model : { ...model, viewport }
+        return $.set(next).run(measure(next, $.props), ObserveSize.make())
+      },
+      Resized: () => $.set(model).run(measure(model, $.props)),
       // The new Model renders other rows, at their estimated heights, so
       // they are measured in turn until a measurement changes nothing
       Measured: (measurement) => {
         const next = measured(model, $.props, measurement)
-        return next === model
-          ? model
-          : $.set(next).run(measure(next, $.props, measurement.viewport))
+        return next === stored
+          ? stored
+          : $.set(next).run(measure(next, $.props))
       },
-    }),
-  // Keyed on the count, so that a list that grows or shrinks starts over and
-  // gets the current window, which measures the items it now renders
+      // The rows next to the focused item may not have been rendered
+      Focused: ({ index }) => {
+        const next = { ...model, focused: index }
+        return $.set(next).run(
+          Command.interrupt(FocusLeft),
+          measure(next, $.props),
+        )
+      },
+      Blurred: ({ index }) => $.set(model).run(FocusLeft({ index })),
+      Unfocused: ({ index }) =>
+        model.focused === index ? { ...model, focused: null } : model,
+    })
+  },
+  // Keyed on the count and the dataset, so that a list with other items
+  // starts over and gets the current window, which measures what it renders
   subscriptions: (_model, props) => [
     props.count > 0 &&
-      Subscription.make("VirtualList.viewport", props.count, () =>
-        Stream.unwrap(
-          Effect.map(Viewport, (viewport) =>
-            viewport.changes.pipe(
-              Stream.map(({ height }) =>
-                Message.make({ _tag: "Moved", viewport: height }),
+      Subscription.make(
+        "VirtualList.viewport",
+        [props.count, props.dataset ?? null],
+        () =>
+          Stream.unwrap(
+            Effect.map(Viewport, (viewport) =>
+              viewport.changes.pipe(
+                Stream.map(({ height }) =>
+                  Message.make({ _tag: "Moved", viewport: height }),
+                ),
               ),
             ),
           ),
-        ),
       ),
   ],
-  parts: (model, p) => {
-    const { after, before, end, start } = windowOf(model, p.props)
+  parts: (stored, p) => {
+    const model = current(stored, p.props)
+    const { after, before, between, ranges } = windowOf(model, p.props)
+    // The first row of a second range, which stands off from the first
+    const pushed = ranges.length === 1 ? -1 : ranges[1].start
     return {
       /** The indices of the items to render, in order. */
-      items: Array.from({ length: end - start }, (_, i) => start + i),
+      items: ranges.flatMap(({ end, start }) =>
+        Array.from({ length: end - start }, (_, i) => start + i),
+      ),
       list: p.part("div", (b) =>
         b
           .ref(List)
@@ -331,13 +518,18 @@ export const VirtualList = Component.define({
       ),
       // Only some of the items are in the document, so each one says where
       // it is in the whole list
-      item: p.part("div", (b, index: number) =>
-        b
+      item: p.part("div", (b, index: number) => {
+        const item = b
           .ref(Item.at(index))
           .attr("role", "listitem")
           .attr("aria-posinset", String(index + 1))
-          .attr("aria-setsize", String(p.props.count)),
-      ),
+          .attr("aria-setsize", String(p.props.count))
+          .on("focusin", Message.make({ _tag: "Focused", index }))
+          .on("focusout", Message.make({ _tag: "Blurred", index }))
+        return index >= pushed && index < pushed + model.lanes
+          ? item.attr("style", `margin-top:${between}px`)
+          : item
+      }),
     }
   },
 })

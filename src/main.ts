@@ -12,6 +12,7 @@ import { Router } from "effect/ui"
 import { BrowserHost, BrowserRouter } from "effect/ui/html"
 import { registerSW } from "virtual:pwa-register"
 import { App } from "./App.ts"
+import { ElementSize } from "./browser/services/ElementSize.ts"
 import { InstallPrompt } from "./browser/services/InstallPrompt.ts"
 import { Reload } from "./browser/services/Reload.ts"
 import { Share } from "./browser/services/Share.ts"
@@ -49,6 +50,7 @@ const Platform = Layer.mergeAll(
   Geolocation.layer,
   Clipboard.layer,
   Viewport.layer,
+  ElementSize.layer,
   InstallPrompt.layer,
   Share.layer,
   Reload.layer,
