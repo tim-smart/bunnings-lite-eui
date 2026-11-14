@@ -261,3 +261,19 @@ test("search: clearing and searching again before a render starts over", async (
     page.getByText("drill / all prices", { exact: true }),
   ).toBeVisible({ timeout: 10_000 })
 })
+
+test("search: only the home page puts focus in the search box", async ({
+  page,
+}) => {
+  await mockRpc(page)
+  const box = page.getByRole("searchbox", { name: "Search for products" })
+  await page.goto("/")
+  await expect(box).toBeFocused()
+
+  // Anywhere else, focus there would bring a phone's keyboard up over the page
+  await page.goto("/?query=hammer")
+  await expect(
+    page.getByText("hammer / all prices", { exact: true }),
+  ).toBeVisible({ timeout: 10_000 })
+  await expect(box).not.toBeFocused()
+})

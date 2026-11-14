@@ -61,7 +61,8 @@ export class SearchAllStores extends Command.Service<SearchAllStores>()(
  * device's location, or by searching every store by hand.
  *
  * The nearest stores are a native `select`, so the keyboard and a phone's
- * own picker work without any handling here. The chosen store is marked on
+ * own picker work without any handling here. Its list is styled where the
+ * browser allows (`.store-select` in `index.css`). The chosen store is marked on
  * its `option`: a `value` on the `select` is set before it has options.
  *
  * The search is a drawer, which the shell shows. It is asked for here and
@@ -125,10 +126,12 @@ export const StoreSelectorNoDeps = Component.define({
         h.select
           .attr("aria-label", "Your store")
           .class(
-            "h-11 w-full cursor-pointer appearance-none rounded-md border border-input bg-card py-2 pr-9 pl-10 text-sm font-medium outline-none transition-[color,box-shadow] hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15",
+            "store-select h-11 w-full cursor-pointer rounded-md border border-input bg-card py-2 pr-9 pl-10 text-sm font-medium outline-none transition-[color,box-shadow] hover:border-primary/40 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/15",
             Option.isNone(shown) ? "text-muted-foreground" : "text-foreground",
           )
           .onFocus(Message.make({ _tag: "Reached" }))
+          // A press that opens a styled list focuses an option, not the select
+          .onClick(Message.make({ _tag: "Reached" }))
           .onChange(({ value }) => {
             const store = nearby.find((store) => store.name === value)
             return store === undefined

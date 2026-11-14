@@ -184,7 +184,10 @@ test("stores: the keyboard picks a nearby store", async ({ page }) => {
   const picker = page.getByRole("combobox", { name: "Your store" })
   await picker.focus()
   await expect(picker.getByRole("option", { name: "Grey Lynn" })).toBeAttached()
+  // The arrow opens the list on its first store, and Enter picks it
   await page.keyboard.press("ArrowDown")
+  await expect(picker.getByRole("option", { name: "Grey Lynn" })).toBeFocused()
+  await page.keyboard.press("Enter")
 
   await expect(picker).toHaveValue("9518")
   await expect(picker).toBeFocused()

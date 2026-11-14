@@ -3,7 +3,12 @@ import { AsyncResult } from "effect/reactivity"
 import { Command, Component, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { buttonClass } from "../../design/classes.ts"
-import { drawer, drawerFooter, drawerHeader } from "../../design/drawer.ts"
+import {
+  drawer,
+  drawerFooter,
+  drawerHeader,
+  drawerLeft,
+} from "../../design/drawer.ts"
 import { PendingInvite } from "../domain/Invite.ts"
 import { GetSyncSettings } from "../loaders/GetSyncSettings.ts"
 import { Invites } from "../services/Invites.ts"
@@ -13,6 +18,7 @@ export const InviteDialogMessage = Schema.TaggedUnion({
   InviteOpened: { invite: PendingInvite },
   Dismissed: {},
   Joined: {},
+  Left: {},
 })
 const Message = InviteDialogMessage
 
@@ -57,8 +63,13 @@ const dismissRef = Html.ref("invite-dismiss", "button")
 export const InviteDialogNoDeps = Component.define({
   name: "InviteDialog",
   model: Schema.Struct({
-    /** The invite waiting for an answer. */
+    /**
+     * The invite waiting for an answer. It stays after the answer, for the
+     * drawer to show while it leaves.
+     */
     invite: Schema.NullOr(PendingInvite),
+    /** Whether the drawer is open, asking. */
+    open: Schema.Boolean,
   }),
   message: Message,
   events: InviteDialogEvents,
@@ -66,35 +77,42 @@ export const InviteDialogNoDeps = Component.define({
     settings: { load: GetSyncSettings, args: () => ({}) },
   },
 }).make({
-  init: () => ({ invite: null }),
+  init: () => ({ invite: null, open: false }),
   update: (model, message, $) =>
     Message.match(message, {
       // An invite can replace one that is already showing, and `autofocus`
       // only counts when a dialog is shown. Focus is moved for every invite,
       // so that Enter never joins one the user hasn't read.
       InviteOpened: ({ invite }) =>
-        $.set({ ...model, invite })
+        $.set({ invite, open: true })
           .run(Html.focus(dismissRef, () => Component.noop))
           .emit(InviteDialogEvents.make({ _tag: "Opened" })),
       Dismissed: () =>
-        $.set({ ...model, invite: null }).emit(
+        $.set({ ...model, open: false }).emit(
           InviteDialogEvents.make({ _tag: "Closed" }),
         ),
       Joined: () =>
-        $.set({ ...model, invite: null })
+        $.set({ ...model, open: false })
           .run(JoinSync.make())
           .emit(InviteDialogEvents.make({ _tag: "Closed" })),
+      // Unless another invite arrived while it was leaving
+      Left: () => (model.open ? model : { ...model, invite: null }),
     }),
-  subscriptions: () => [invitesOpened],
+  subscriptions: (model) => [
+    invitesOpened,
+    model.invite !== null &&
+      !model.open &&
+      drawerLeft("invite", Message.make({ _tag: "Left" })),
+  ],
   view: (model, h) => {
-    const { invite } = model
+    const { invite, open } = model
     if (invite === null) return h.div()
     const dismissed = Message.make({ _tag: "Dismissed" })
 
     if (invite._tag === "Invalid") {
       return drawer(
         h,
-        { titleId: "invite-title", onClose: dismissed },
+        { titleId: "invite-title", open, onClose: dismissed },
         drawerHeader(
           h,
           { titleId: "invite-title", title: "Invite link not valid" },
@@ -118,7 +136,7 @@ export const InviteDialogNoDeps = Component.define({
     )
     return drawer(
       h,
-      { titleId: "invite-title", onClose: dismissed },
+      { titleId: "invite-title", open, onClose: dismissed },
       drawerHeader(
         h,
         { titleId: "invite-title", title: "Join shared sync?" },

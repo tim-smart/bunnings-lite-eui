@@ -75,11 +75,13 @@ const remoteUrlOf = (text: string): string | null | undefined => {
 }
 
 /**
- * The sync settings, in a drawer. Mount it while it is open, outside the
- * page it covers. It reports when it is closed.
+ * The sync settings, in a drawer. Mount it outside the page it covers, while
+ * it is open and then until the drawer has left. It reports when it is
+ * closed.
  */
 export const SyncSettingsPanelNoDeps = Component.define({
   name: "SyncSettingsPanel",
+  props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({
     /** What was typed into the remote field. It shows the saved one until then. */
     remoteUrl: Schema.NullOr(Schema.String),
@@ -126,6 +128,7 @@ export const SyncSettingsPanelNoDeps = Component.define({
       h,
       {
         titleId: "sync-settings-title",
+        open: h.props.open,
         onClose: Message.make({ _tag: "Closed" }),
       },
       drawerHeader(

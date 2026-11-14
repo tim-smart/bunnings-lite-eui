@@ -12,6 +12,7 @@ import { Router } from "effect/ui"
 import { BrowserHost, BrowserRouter } from "effect/ui/html"
 import { registerSW } from "virtual:pwa-register"
 import { App } from "./App.ts"
+import { DrawerDrag } from "./browser/services/DrawerDrag.ts"
 import { ElementSize } from "./browser/services/ElementSize.ts"
 import { InstallPrompt } from "./browser/services/InstallPrompt.ts"
 import { Reload } from "./browser/services/Reload.ts"
@@ -22,8 +23,8 @@ import { AppRoute } from "./routes.ts"
 import { TracerLayer } from "./Tracing.ts"
 
 // The entry module mounts the app and provides the platform: the Router, the
-// transport to the server, storage, the browser APIs the app listens to,
-// tracing and config. Every domain Layer is provided by the component that
+// transport to the server, storage, the browser APIs the app listens to, the
+// drag that closes a drawer, tracing and config. Every domain Layer is provided by the component that
 // needs it.
 
 // The socket the Bunnings Lite RPC client talks over
@@ -54,6 +55,7 @@ const Platform = Layer.mergeAll(
   InstallPrompt.layer,
   Share.layer,
   Reload.layer,
+  DrawerDrag,
   TracerLayer,
 ).pipe(
   // First, so an invite is out of the address bar before the Router reads it

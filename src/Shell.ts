@@ -5,6 +5,7 @@ import { Command, Component, Head, Router, Subscription } from "effect/ui"
 import { Html } from "effect/ui/html"
 import { SessionLocation } from "../server/src/domain/Bunnings.ts"
 import { buttonClass, inputClass } from "./design/classes.ts"
+import { drawerLeft } from "./design/drawer.ts"
 import { icon } from "./design/icons.ts"
 import { ListFavoritesRefresh } from "./favorites/loaders/ListFavorites.ts"
 import { Favorites } from "./favorites/services/Favorites.ts"
@@ -24,6 +25,9 @@ import { Invites } from "./sync/services/Invites.ts"
 import { SyncRemote } from "./sync/services/SyncRemote.ts"
 import { SyncSettings } from "./sync/services/SyncSettings.ts"
 
+/** The drawers `Shell` mounts for as long as they are on the screen. */
+const Sheet = Schema.Literals(["syncSettings", "storeSearch"])
+
 export const ShellMessage = Schema.TaggedUnion({
   SearchTyped: { text: Schema.String },
   SearchSubmitted: {},
@@ -33,6 +37,7 @@ export const ShellMessage = Schema.TaggedUnion({
   InviteChanged: { open: Schema.Boolean },
   StoreSearchAsked: { asking: Schema.Boolean },
   StoreSearchAnswered: { store: Schema.Option(SessionLocation) },
+  DrawerLeft: { drawer: Sheet },
 })
 const Message = ShellMessage
 
@@ -76,6 +81,38 @@ const Drawer = Schema.NullOr(
   Schema.Literals(["syncSettings", "storeSearch", "invite"]),
 )
 
+const ShellModel = Schema.Struct({
+  /** The drawer that is open. */
+  drawer: Drawer,
+  /** Drawers that were closed and are still sliding off the screen. */
+  leaving: Schema.Array(Sheet),
+})
+type ShellModel = typeof ShellModel.Type
+
+/** Opens `drawer`, which comes back up if it was still on its way out. */
+const opened = (
+  model: ShellModel,
+  drawer: NonNullable<typeof Drawer.Type>,
+): ShellModel => ({
+  drawer,
+  leaving: model.leaving.filter((sheet) => sheet !== drawer),
+})
+
+/**
+ * Closes the open drawer. One that `Shell` mounts stays mounted while it
+ * slides away, until `DrawerLeft`.
+ */
+const closed = (model: ShellModel): ShellModel =>
+  model.drawer === null || model.drawer === "invite"
+    ? { ...model, drawer: null }
+    : {
+        drawer: null,
+        leaving: [
+          ...model.leaving.filter((sheet) => sheet !== model.drawer),
+          model.drawer,
+        ],
+      }
+
 const ShellDef = Component.define({
   name: "Shell",
   props: Schema.Struct({
@@ -83,10 +120,7 @@ const ShellDef = Component.define({
     /** Starts the search page over when it changes. */
     searchesCleared: Schema.Number,
   }),
-  model: Schema.Struct({
-    /** The drawer that is open. */
-    drawer: Drawer,
-  }),
+  model: ShellModel,
   message: Message,
   // The search itself belongs to the search page. It is watched here as
   // well, for the search box to show while it is running.
@@ -124,14 +158,14 @@ const searchTyped = ShellDef.update("SearchTyped", (_model, { text }, $) => {
 // An invite takes the place of whichever drawer is open
 const inviteChanged = ShellDef.update("InviteChanged", (model, { open }, $) => {
   if (open) {
-    const next = { ...model, drawer: "invite" as const }
+    const next = opened(closed(model), "invite")
     // The selector is still waiting to hear from its search
     return model.drawer === "storeSearch" ? $.set(next).run(noStoreFound) : next
   }
   // An invite has nothing on the page that opened it, so focus goes to the
   // button for what it was about
   return model.drawer === "invite"
-    ? $.set({ ...model, drawer: null }).run(focusSyncSettings)
+    ? $.set(closed(model)).run(focusSyncSettings)
     : model
 })
 
@@ -140,10 +174,9 @@ const storeSearchAsked = ShellDef.update(
   (model, { asking }, $) => {
     if (!asking) {
       // Without an answer when the page that asked has gone
-      return model.drawer === "storeSearch" ? { ...model, drawer: null } : model
+      return model.drawer === "storeSearch" ? closed(model) : model
     }
-    if (model.drawer === null)
-      return { ...model, drawer: "storeSearch" as const }
+    if (model.drawer === null) return opened(model, "storeSearch")
     // Asked just as another drawer opened, which keeps its place
     return model.drawer === "storeSearch" ? model : $.run(noStoreFound)
   },
@@ -153,10 +186,9 @@ const storeSearchAsked = ShellDef.update(
 const storeSearchAnswered = ShellDef.update(
   "StoreSearchAnswered",
   (model, { store }, $) =>
-    $.set({
-      ...model,
-      drawer: model.drawer === "storeSearch" ? null : model.drawer,
-    }).run(AnswerStoreSearch.make({ store })),
+    $.set(model.drawer === "storeSearch" ? closed(model) : model).run(
+      AnswerStoreSearch.make({ store }),
+    ),
 )
 
 const logo = ShellDef.fragment((h, minimize: boolean) =>
@@ -227,7 +259,10 @@ const searchBox = ShellDef.fragment(
                   .attr("type", "search")
                   .attr("aria-label", "Search for products")
                   .attr("placeholder", "Search for products...")
-                  .attr("autofocus", "")
+                  // Only on the home page, which is there to search from. The
+                  // Router focuses it after each navigation that finds it, and
+                  // on a phone that brings the keyboard up over the page.
+                  .attr("autofocus", minimize ? undefined : "")
                   .class(
                     inputClass(
                       Html.classNames(
@@ -339,29 +374,32 @@ const page = ShellDef.fragment((h, route: AppRoute) => {
 
 /**
  * The invite dialog is always mounted, to hear of invites. The other drawers
- * are mounted while they are open.
+ * are mounted while they are open, and then until they have slid away.
  */
-const drawers = ShellDef.fragment(
-  (h, drawer: typeof Drawer.Type) =>
-    [
-      h.child(InviteDialog, {
-        key: "invite",
-        onEmit: ({ _tag }) =>
-          Message.make({ _tag: "InviteChanged", open: _tag === "Opened" }),
+const drawers = ShellDef.fragment((h, { drawer, leaving }: ShellModel) => {
+  const shown = (sheet: typeof Sheet.Type) =>
+    drawer === sheet || leaving.includes(sheet)
+  return [
+    h.child(InviteDialog, {
+      key: "invite",
+      onEmit: ({ _tag }) =>
+        Message.make({ _tag: "InviteChanged", open: _tag === "Opened" }),
+    }),
+    shown("syncSettings") &&
+      h.child(SyncSettingsPanel, {
+        key: "sync-settings",
+        props: { open: drawer === "syncSettings" },
+        onEmit: () => Message.make({ _tag: "SyncSettingsClosed" }),
       }),
-      drawer === "syncSettings" &&
-        h.child(SyncSettingsPanel, {
-          key: "sync-settings",
-          onEmit: () => Message.make({ _tag: "SyncSettingsClosed" }),
-        }),
-      drawer === "storeSearch" &&
-        h.child(StoreSearch, {
-          key: "store-search",
-          onEmit: ({ store }) =>
-            Message.make({ _tag: "StoreSearchAnswered", store }),
-        }),
-    ] as const,
-)
+    shown("storeSearch") &&
+      h.child(StoreSearch, {
+        key: "store-search",
+        props: { open: drawer === "storeSearch" },
+        onEmit: ({ store }) =>
+          Message.make({ _tag: "StoreSearchAnswered", store }),
+      }),
+  ] as const
+})
 
 const shellView = ShellDef.view((model, h) =>
   h.div(
@@ -378,7 +416,7 @@ const shellView = ShellDef.view((model, h) =>
               .children(page(h, h.props.route)),
           ),
       ),
-    ...drawers(h, model.drawer),
+    ...drawers(h, model),
   ),
 )
 
@@ -391,7 +429,7 @@ const shellView = ShellDef.view((model, h) =>
  * invite can arrive at any moment, and closes whichever is open.
  */
 export const ShellNoDeps = ShellDef.make({
-  init: () => ({ drawer: null }),
+  init: () => ({ drawer: null, leaving: [] }),
   update: {
     SearchTyped: searchTyped,
     SearchSubmitted: (_model, _message, $) =>
@@ -405,17 +443,24 @@ export const ShellNoDeps = ShellDef.make({
         }),
       ),
     SyncSettingsOpened: (model) =>
-      model.drawer === null
-        ? { ...model, drawer: "syncSettings" as const }
-        : model,
+      model.drawer === null ? opened(model, "syncSettings") : model,
     // The host hands focus back to the button that opened it
     SyncSettingsClosed: (model) =>
-      model.drawer === "syncSettings" ? { ...model, drawer: null } : model,
+      model.drawer === "syncSettings" ? closed(model) : model,
     InviteChanged: inviteChanged,
     StoreSearchAsked: storeSearchAsked,
     StoreSearchAnswered: storeSearchAnswered,
+    DrawerLeft: (model, { drawer }) => ({
+      ...model,
+      leaving: model.leaving.filter((sheet) => sheet !== drawer),
+    }),
   },
-  subscriptions: () => [storeSearchAskedSubscription],
+  subscriptions: (model) => [
+    storeSearchAskedSubscription,
+    ...model.leaving.map((drawer) =>
+      drawerLeft(drawer, Message.make({ _tag: "DrawerLeft", drawer })),
+    ),
+  ],
   head: (_model, { route }) =>
     route._tag === "NotFound" ? [Head.title("Page not found")] : [],
   view: shellView,
