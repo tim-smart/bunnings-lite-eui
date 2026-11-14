@@ -23,7 +23,7 @@ export class ToggleFavorite extends Command.Service<ToggleFavorite>()(
   },
   Effect.gen(function* () {
     const favorites = yield* Favorites
-    return ({ product }) => favorites.toggle(product)
+    return ({ product }) => Effect.as(favorites.toggle(product), Component.noop)
   }),
 ) {}
 
@@ -46,12 +46,7 @@ export const FavoriteButtonNoDeps = Component.define({
   init: () => ({}),
   update: (_model, message, $) =>
     FavoriteButtonMessage.match(message, {
-      Toggled: () =>
-        $.run(
-          ToggleFavorite.make({ product: $.props.product }).pipe(
-            Command.asNoop,
-          ),
-        ),
+      Toggled: () => $.run(ToggleFavorite.make({ product: $.props.product })),
     }),
   view: (_model, h) => {
     const { product, variant } = h.props

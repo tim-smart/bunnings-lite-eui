@@ -31,7 +31,7 @@ export class JoinSync extends Command.Service<JoinSync>()(
   { args: {} },
   Effect.gen(function* () {
     const invites = yield* Invites
-    return () => invites.join
+    return () => Effect.as(invites.join, Component.noop)
   }),
 ) {}
 
@@ -82,7 +82,7 @@ export const InviteDialogNoDeps = Component.define({
         ),
       Joined: () =>
         $.set({ ...model, invite: null })
-          .run(JoinSync.make().pipe(Command.asNoop))
+          .run(JoinSync.make())
           .emit(InviteDialogEvents.make({ _tag: "Closed" })),
     }),
   subscriptions: () => [invitesOpened],

@@ -33,7 +33,7 @@ export class ReloadPage extends Command.Service<ReloadPage>()(
   { args: {} },
   Effect.gen(function* () {
     const page = yield* Reload
-    return () => page.reload
+    return () => Effect.as(page.reload, Component.noop)
   }),
 ) {}
 
@@ -77,7 +77,7 @@ export const AppNoDeps = Component.define({
           progress === "Finished" ? ("Ready" as const) : ("Blocked" as const),
       }),
       JoinFailed: () => ({ ...model, join: "Failed" as const }),
-      Retry: () => $.run(ReloadPage.make().pipe(Command.asNoop)),
+      Retry: () => $.run(ReloadPage.make()),
     }),
   subscriptions: (model) => [
     Router.subscription(AppRoute, model.route, (route) =>

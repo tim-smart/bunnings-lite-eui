@@ -47,7 +47,7 @@ export class AnswerStoreSearch extends Command.Service<AnswerStoreSearch>()(
   },
   Effect.gen(function* () {
     const prompt = yield* StoreSearchPrompt
-    return ({ store }) => prompt.answer(store)
+    return ({ store }) => Effect.as(prompt.answer(store), Component.noop)
   }),
 ) {}
 
@@ -69,9 +69,7 @@ const searchRef = Html.ref("search", "input")
 const syncSettingsRef = Html.ref("sync-settings-open", "button")
 
 const focusSyncSettings = Html.focus(syncSettingsRef, () => Component.noop)
-const noStoreFound = AnswerStoreSearch.make({ store: Option.none() }).pipe(
-  Command.asNoop,
-)
+const noStoreFound = AnswerStoreSearch.make({ store: Option.none() })
 
 /** Which drawer is open, if any. Only one is open at a time. */
 const Drawer = Schema.NullOr(
@@ -158,7 +156,7 @@ const storeSearchAnswered = ShellDef.update(
     $.set({
       ...model,
       drawer: model.drawer === "storeSearch" ? null : model.drawer,
-    }).run(AnswerStoreSearch.make({ store }).pipe(Command.asNoop)),
+    }).run(AnswerStoreSearch.make({ store })),
 )
 
 const logo = ShellDef.fragment((h, minimize: boolean) =>

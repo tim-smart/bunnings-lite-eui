@@ -42,7 +42,7 @@ export class ShareProduct extends Command.Service<ShareProduct>()(
   { args: { title: Schema.String } },
   Effect.gen(function* () {
     const share = yield* Share
-    return ({ title }) => share.sharePage(title)
+    return ({ title }) => Effect.as(share.sharePage(title), Component.noop)
   }),
 ) {}
 
@@ -509,8 +509,7 @@ export const ProductPageNoDeps = ProductPageDef.make({
     Message.match(message, {
       ImageChosen: ({ index }) => ({ ...model, image: index }),
       BackPressed: () => $.run(Router.Back.make().pipe(Command.asNoop)),
-      SharePressed: ({ title }) =>
-        $.run(ShareProduct.make({ title }).pipe(Command.asNoop)),
+      SharePressed: ({ title }) => $.run(ShareProduct.make({ title })),
       BottomReached: () =>
         hasMore($.loaded.reviews) ? $.loadMore("reviews") : model,
     }),

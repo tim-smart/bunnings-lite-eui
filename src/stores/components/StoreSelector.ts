@@ -35,7 +35,8 @@ export class ChooseStore extends Command.Service<ChooseStore>()(
   },
   Effect.gen(function* () {
     const session = yield* Session
-    return ({ location }) => session.setLocation(location)
+    return ({ location }) =>
+      Effect.as(session.setLocation(location), Component.noop)
   }),
 ) {}
 
@@ -48,7 +49,10 @@ export class SearchAllStores extends Command.Service<SearchAllStores>()(
   { args: {} },
   Effect.gen(function* () {
     const prompt = yield* StoreSearchPrompt
-    return () => prompt.ask
+    return () =>
+      Effect.map(prompt.ask, (store) =>
+        Message.make({ _tag: "SearchAnswered", store }),
+      )
   }),
 ) {}
 
@@ -85,22 +89,13 @@ export const StoreSelectorNoDeps = Component.define({
     Message.match(message, {
       Reached: () =>
         model.nearbyWanted ? model : { ...model, nearbyWanted: true },
-      StoreChosen: ({ location }) =>
-        $.run(ChooseStore.make({ location }).pipe(Command.asNoop)),
-      SearchOpened: () =>
-        $.run(
-          SearchAllStores.make().pipe(
-            Command.map((store) =>
-              Message.make({ _tag: "SearchAnswered", store }),
-            ),
-          ),
-        ),
+      StoreChosen: ({ location }) => $.run(ChooseStore.make({ location })),
+      SearchOpened: () => $.run(SearchAllStores.make()),
       // The host hands focus back to the button that opened the search
       SearchAnswered: ({ store }) =>
         Option.match(store, {
           onNone: () => model,
-          onSome: (location) =>
-            $.run(ChooseStore.make({ location }).pipe(Command.asNoop)),
+          onSome: (location) => $.run(ChooseStore.make({ location })),
         }),
     }),
   view: (model, h) => {

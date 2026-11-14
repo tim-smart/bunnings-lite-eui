@@ -16,7 +16,7 @@ export class PromptInstall extends Command.Service<PromptInstall>()(
   { args: {} },
   Effect.gen(function* () {
     const install = yield* InstallPrompt
-    return () => install.prompt
+    return () => Effect.as(install.prompt, Component.noop)
   }),
 ) {}
 
@@ -43,7 +43,7 @@ export const InstallButtonNoDeps = Component.define({
   update: (_model, message, $) =>
     Message.match(message, {
       AvailabilityChanged: ({ available }) => ({ available }),
-      Pressed: () => $.run(PromptInstall.make().pipe(Command.asNoop)),
+      Pressed: () => $.run(PromptInstall.make()),
     }),
   subscriptions: () => [installAvailable],
   view: (model, h) =>
