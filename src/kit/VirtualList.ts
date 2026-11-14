@@ -68,7 +68,7 @@ type Measurement = typeof Measurement.Type
 const Message = Schema.TaggedUnion({
   /** The window scrolled or changed size, or the list got other items. */
   Moved: { viewport: Schema.Finite },
-  /** The list's own box changed size: a row got taller, or the list narrower. */
+  /** The box of the list or of a rendered item changed size. */
   Resized: {},
   Measured: Measurement.fields,
   /** The focus went to an item, or to something in it. */
@@ -345,10 +345,11 @@ const measure = (model: Model, props: Props) =>
   Measure({ ranges: windowOf(model, props).ranges })
 
 /**
- * Follows the size of the list element: it changes when a rendered row gets
- * taller or shorter, and when the list gets wider or narrower. It ends at
- * once when the list isn't rendered, and one that is running is enough, so a
- * second one is dropped.
+ * Follows the size of the list element and of the items rendered in it: one
+ * of them changes when a row gets taller or shorter, and when the list gets
+ * wider or narrower. The list alone would miss a row that grows as much as
+ * another shrinks. It ends at once when the list isn't rendered, and one
+ * that is running is enough, so a second one is dropped.
  */
 export class ObserveSize extends Command.Service<ObserveSize>()(
   "VirtualList.observe",
@@ -422,9 +423,10 @@ const FocusLeft = Command.make(
  * **What it follows**
  *
  * It measures on a scroll and a resize of the window, through `Viewport`,
- * and when the list element changes size, through `ElementSize`: that is
- * when a rendered row grows or shrinks. When `count` or `dataset` changes
- * it measures again. A row keeps the height it was last measured at while
+ * and when the list element or one of its children changes size, through
+ * `ElementSize`: that is when a rendered row grows or shrinks. So the items
+ * have to be the list element's own children. When `count` or `dataset`
+ * changes it measures again. A row keeps the height it was last measured at while
  * it isn't rendered, so one that changed since is corrected when the window
  * comes back to it.
  *

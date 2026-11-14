@@ -153,6 +153,16 @@ const settled = (page: Page) =>
     })
     .toBe(true)
 
+/**
+ * No more cards than the rows by the window, three more on each side of
+ * them, and the focused card's row with the ones next to it.
+ */
+const bounded = async (page: Page) => {
+  const { cards, columns, rowHeight } = await read(page)
+  const inWindow = Math.ceil(page.viewportSize()!.height / rowHeight) + 1
+  expect(cards).toBeLessThanOrEqual((inWindow + 6 + 3) * columns)
+}
+
 test("a long list of results renders only the cards near the window", async ({
   page,
 }) => {
@@ -221,6 +231,7 @@ test("the focused card keeps the focus when the window leaves it", async ({
   }
   await expect(card(page, 5)).not.toBeInViewport()
   await expect(card(page, 5)).toBeFocused()
+  await bounded(page)
 
   // Tab goes on from the focused card: past its favourite button to the next
   await page.keyboard.press("Tab")
@@ -238,7 +249,63 @@ test("the focused card keeps the focus when the window leaves it", async ({
   await expect.poll(async () => (await read(page)).columns).toBe(2)
   await settled(page)
   await expect(card(page, 49)).toBeFocused()
+  await bounded(page)
   await page.keyboard.press("Tab")
   await page.keyboard.press("Tab")
   await expect(card(page, 50)).toBeFocused()
+})
+
+test("rows that trade heights don't leave the window empty", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 800 })
+  const rpc = await mockRpc(page)
+  rpc.release()
+  await page.goto("/?query=hammer")
+  await expect(card(page, 1)).toBeVisible()
+  // Rows of 300px, but for the one of cards 29 and 30. The browser is kept
+  // from scrolling along with a card when the ones above it change, as not
+  // every browser does that.
+  await page.addStyleTag({
+    content: `
+      html { overflow-anchor: none }
+      [role="listitem"] { height: 300px; overflow: hidden }
+      html:not(.traded) [role="listitem"]:is([aria-posinset="29"], [aria-posinset="30"]),
+      html.traded [role="listitem"]:is([aria-posinset="5"], [aria-posinset="6"]) {
+        height: 2800px;
+      }
+    `,
+  })
+  const inView = () =>
+    page.evaluate(
+      () =>
+        Array.from(document.querySelectorAll('[role="listitem"]')).filter(
+          (item) => {
+            const box = item.getBoundingClientRect()
+            return box.bottom > 0 && box.top < window.innerHeight
+          },
+        ).length,
+    )
+
+  // The focused card stays in the document, far above the window
+  await card(page, 5).focus()
+  await scrollDownTo(page, 29)
+  await page.evaluate(() =>
+    scrollBy(
+      0,
+      document.querySelector('[aria-posinset="29"]')!.getBoundingClientRect()
+        .top,
+    ),
+  )
+  await expect.poll(inView).toBeGreaterThan(0)
+  await page.waitForTimeout(300)
+  const before = await read(page)
+
+  // One row gets as much taller as another gets shorter, so the list is as
+  // tall as it was
+  await page.evaluate(() => document.documentElement.classList.add("traded"))
+  await expect.poll(inView).toBeGreaterThan(0)
+  const after = await read(page)
+  expect(after.listHeight).toBe(before.listHeight)
+  expect(after.scrollY).toBe(before.scrollY)
 })
