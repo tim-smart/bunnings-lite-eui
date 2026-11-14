@@ -12,6 +12,7 @@ import { buttonClass } from "../design/classes.ts"
 import { icon } from "../design/icons.ts"
 import { skeleton } from "../design/skeleton.ts"
 import { FavoritesList } from "../favorites/components/FavoritesList.ts"
+import { VirtualList } from "../kit/VirtualList.ts"
 import { ProductCard } from "../product/components/ProductCard.ts"
 import { KnownProducts } from "../product/services/KnownProducts.ts"
 import { SearchRoute } from "../routes.ts"
@@ -170,14 +171,29 @@ export const SearchPageNoDeps = Component.define({
     const grid = (items: ReadonlyArray<ProductBaseInfo>) =>
       items.length === 0
         ? noResults()
-        : h.div.class(gridClass).children(
-            items.map((product) =>
-              h.child(ProductCard, {
-                key: product.id,
-                props: { product, query: route.query.query },
-              }),
-            ),
-          )
+        : // Only the cards near the window are rendered
+          h.child(VirtualList, {
+            key: "results",
+            props: {
+              count: items.length,
+              estimatedRowSize: 350,
+              initialCount: 16,
+            },
+            view: (list) =>
+              list.list(h.div.class(gridClass)).children(
+                list.items.map((index) => {
+                  const product = items[index]
+                  return list
+                    .item(h.div.key(product.id).class("grid min-w-0"), index)
+                    .children(
+                      h.child(ProductCard, {
+                        key: product.id,
+                        props: { product, query: route.query.query },
+                      }),
+                    )
+                }),
+              ),
+          })
 
     const results = AsyncResult.match(h.loaded.results, {
       // The last results stay up while the next ones load
