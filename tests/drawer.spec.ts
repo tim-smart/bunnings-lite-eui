@@ -116,6 +116,41 @@ test("drawer: slides away when it is closed, and gives the page back at once", a
   await expect(page.locator("dialog")).toHaveCount(0)
 })
 
+test("drawer: opened again while it slides away, it stays open", async ({
+  page,
+}) => {
+  const { trigger, drawer } = await openSettings(page)
+  const rest = await panelTop(page)
+
+  await page.keyboard.press("Escape")
+  await expect(drawer).toBeHidden()
+  await trigger.click()
+  // Past when the closed drawer would have been unmounted
+  await page.waitForTimeout(700)
+
+  await expect(drawer).toBeVisible()
+  await expect(drawer.getByRole("button", { name: "Close" })).toBeFocused()
+  await settled(page)
+  expect(await panelTop(page)).toBe(rest)
+})
+
+test("drawer: on a short screen its controls scroll into view", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 400 })
+  const { drawer } = await openSettings(page)
+
+  // Focus starts on the last control, below what fits
+  const close = drawer.getByRole("button", { name: "Close" })
+  await expect(close).toBeFocused()
+  await expect(close).toBeInViewport({ ratio: 1 })
+
+  const first = drawer.getByLabel("Remote URL")
+  await first.focus()
+  await expect(first).toBeInViewport({ ratio: 1 })
+  await expect(close).not.toBeInViewport()
+})
+
 test("drawer: the page behind doesn't scroll", async ({ page }) => {
   await page.addInitScript(() => {
     addEventListener("DOMContentLoaded", () => {

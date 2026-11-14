@@ -196,6 +196,32 @@ test("stores: the keyboard picks a nearby store", async ({ page }) => {
     .toMatchObject({ code: "9518", city: "Grey Lynn" })
 })
 
+test.describe("on a touch device", () => {
+  test.use({ hasTouch: true })
+
+  test("stores: the picker is the system's own", async ({ page }) => {
+    await page.context().grantPermissions(["geolocation"])
+    await page.context().setGeolocation({ latitude: -36.85, longitude: 174.76 })
+    const calls = await mockRpc(page)
+    await page.goto("/")
+
+    const picker = page.getByRole("combobox", { name: "Your store" })
+    await picker.focus()
+    await expect(
+      picker.getByRole("option", { name: "Grey Lynn" }),
+    ).toBeAttached()
+    await expect(picker).not.toHaveCSS("appearance", "base-select")
+    // No list of the app's to open: the arrow picks, and focus stays put
+    await page.keyboard.press("ArrowDown")
+
+    await expect(picker).toHaveValue("9518")
+    await expect(picker).toBeFocused()
+    await expect
+      .poll(() => calls.logins.at(-1))
+      .toMatchObject({ code: "9518", city: "Grey Lynn" })
+  })
+})
+
 test("stores: the store search is modal", async ({ page }) => {
   await mockRpc(page)
   await page.goto("/")

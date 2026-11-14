@@ -74,7 +74,12 @@ export const drawer = <Msg, const C extends ReadonlyArray<View.Input<Msg>>>(
             .children(
               h.div.class("bg-muted mx-auto h-2 w-[100px] rounded-full"),
             ),
-          ...children,
+          // What doesn't fit on a short screen scrolls here, under the handle.
+          // The dialog can't scroll, so nothing else would bring a focused
+          // control into view.
+          h.div
+            .class("drawer-body flex min-h-0 flex-1 flex-col overflow-y-auto")
+            .children(...children),
         ),
     )
 

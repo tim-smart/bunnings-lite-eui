@@ -412,8 +412,10 @@ body {
   }
   .drawer-panel {
     translate: 0 100%;
-    overscroll-behavior: contain;
     transition: translate var(--drawer-duration) var(--drawer-ease);
+  }
+  .drawer-body {
+    overscroll-behavior: contain;
   }
   .drawer[open] > .drawer-backdrop {
     opacity: 1;
@@ -447,6 +449,14 @@ body {
   /* The page doesn't scroll behind an open sheet */
   html:has(.drawer[open]) {
     overflow: hidden;
+    /* Where its scrollbar was, so that nothing behind the sheet moves. See
+       ScrollbarWidth.ts. */
+    padding-right: var(--scrollbar-width, 0px);
+  }
+  /* What is fixed to the right edge stays clear of it too. By a margin: the
+     `right-0` utility is in a later layer, and would win over `right`. */
+  html:has(.drawer[open]) .fixed.right-0 {
+    margin-right: var(--scrollbar-width, 0px);
   }
 
   /* Reduced motion: the sheet stays where it is and fades, quickly */
