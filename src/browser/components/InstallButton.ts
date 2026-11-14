@@ -7,7 +7,6 @@ import { InstallPrompt } from "../services/InstallPrompt.ts"
 export const InstallButtonMessage = Schema.TaggedUnion({
   AvailabilityChanged: { available: Schema.Boolean },
   Pressed: {},
-  Done: {},
 })
 const Message = InstallButtonMessage
 
@@ -41,14 +40,10 @@ export const InstallButtonNoDeps = Component.define({
   message: Message,
 }).make({
   init: () => ({ available: false }),
-  update: (model, message, $) =>
+  update: (_model, message, $) =>
     Message.match(message, {
       AvailabilityChanged: ({ available }) => ({ available }),
-      Pressed: () =>
-        $.run(
-          PromptInstall.make().pipe(Command.as(Message.make({ _tag: "Done" }))),
-        ),
-      Done: () => model,
+      Pressed: () => $.run(PromptInstall.make().pipe(Command.asNoop)),
     }),
   subscriptions: () => [installAvailable],
   view: (model, h) =>

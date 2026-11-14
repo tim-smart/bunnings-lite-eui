@@ -17,7 +17,6 @@ export const SyncSettingsPanelMessage = Schema.TaggedUnion({
   CopyPressed: {},
   Copied: { copied: Schema.Boolean },
   CopiedExpired: {},
-  Done: {},
 })
 const Message = SyncSettingsPanelMessage
 
@@ -65,8 +64,6 @@ export class CopyInvite extends Command.Service<CopyInvite>()(
   }),
 ) {}
 
-const done = Command.as(Message.make({ _tag: "Done" }))
-
 // The URL a remote field holds: none when blank, and nothing to save while
 // what is typed isn't a URL yet
 const remoteUrlOf = (text: string): string | null | undefined => {
@@ -103,7 +100,7 @@ export const SyncSettingsPanelNoDeps = Component.define({
         return url === undefined
           ? { ...model, remoteUrl: text }
           : $.set({ ...model, remoteUrl: text }).run(
-              SetRemoteUrl.make({ url }).pipe(done),
+              SetRemoteUrl.make({ url }).pipe(Command.asNoop),
             )
       },
       CopyPressed: () =>
@@ -114,7 +111,6 @@ export const SyncSettingsPanelNoDeps = Component.define({
         ),
       Copied: ({ copied }) => ({ ...model, copied }),
       CopiedExpired: () => ({ ...model, copied: false }),
-      Done: () => model,
     }),
   subscriptions: (model) => [
     model.copied &&

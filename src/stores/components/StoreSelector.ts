@@ -18,7 +18,6 @@ export const StoreSelectorMessage = Schema.TaggedUnion({
   SearchOpened: {},
   /** The store the search came back with, or none when it was closed. */
   SearchAnswered: { store: Schema.Option(SessionLocation) },
-  Done: {},
 })
 const Message = StoreSelectorMessage
 
@@ -52,8 +51,6 @@ export class SearchAllStores extends Command.Service<SearchAllStores>()(
     return () => prompt.ask
   }),
 ) {}
-
-const done = Command.as(Message.make({ _tag: "Done" }))
 
 /**
  * Chooses the store to shop at: from the ten nearest, which asks for the
@@ -89,7 +86,7 @@ export const StoreSelectorNoDeps = Component.define({
       Reached: () =>
         model.nearbyWanted ? model : { ...model, nearbyWanted: true },
       StoreChosen: ({ location }) =>
-        $.run(ChooseStore.make({ location }).pipe(done)),
+        $.run(ChooseStore.make({ location }).pipe(Command.asNoop)),
       SearchOpened: () =>
         $.run(
           SearchAllStores.make().pipe(
@@ -103,9 +100,8 @@ export const StoreSelectorNoDeps = Component.define({
         Option.match(store, {
           onNone: () => model,
           onSome: (location) =>
-            $.run(ChooseStore.make({ location }).pipe(done)),
+            $.run(ChooseStore.make({ location }).pipe(Command.asNoop)),
         }),
-      Done: () => model,
     }),
   view: (model, h) => {
     const shown = Option.flatten(AsyncResult.value(h.loaded.current))

@@ -11,7 +11,6 @@ import { Favorites } from "../services/Favorites.ts"
 
 export const FavoriteButtonMessage = Schema.TaggedUnion({
   Toggled: {},
-  Saved: {},
 })
 
 /** Adds a product to the favourites, or removes it if it is one already. */
@@ -45,15 +44,14 @@ export const FavoriteButtonNoDeps = Component.define({
   },
 }).make({
   init: () => ({}),
-  update: (model, message, $) =>
+  update: (_model, message, $) =>
     FavoriteButtonMessage.match(message, {
       Toggled: () =>
         $.run(
           ToggleFavorite.make({ product: $.props.product }).pipe(
-            Command.as(FavoriteButtonMessage.make({ _tag: "Saved" })),
+            Command.asNoop,
           ),
         ),
-      Saved: () => model,
     }),
   view: (_model, h) => {
     const { product, variant } = h.props

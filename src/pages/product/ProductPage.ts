@@ -33,7 +33,6 @@ export const ProductPageMessage = Schema.TaggedUnion({
   BackPressed: {},
   SharePressed: { title: Schema.String },
   BottomReached: {},
-  Done: {},
 })
 const Message = ProductPageMessage
 
@@ -46,8 +45,6 @@ export class ShareProduct extends Command.Service<ShareProduct>()(
     return ({ title }) => share.sharePage(title)
   }),
 ) {}
-
-const done = Command.as(Message.make({ _tag: "Done" }))
 
 /**
  * What is known of the product so far: all of it once it has loaded, until
@@ -511,12 +508,11 @@ export const ProductPageNoDeps = ProductPageDef.make({
   update: (model, message, $) =>
     Message.match(message, {
       ImageChosen: ({ index }) => ({ ...model, image: index }),
-      BackPressed: () => $.run(Router.Back.make().pipe(done)),
+      BackPressed: () => $.run(Router.Back.make().pipe(Command.asNoop)),
       SharePressed: ({ title }) =>
-        $.run(ShareProduct.make({ title }).pipe(done)),
+        $.run(ShareProduct.make({ title }).pipe(Command.asNoop)),
       BottomReached: () =>
         hasMore($.loaded.reviews) ? $.loadMore("reviews") : model,
-      Done: () => model,
     }),
   subscriptions: () => [bottomReached(Message.make({ _tag: "BottomReached" }))],
   head: (_model, _props, loaded) => [

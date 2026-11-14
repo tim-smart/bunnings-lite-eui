@@ -18,7 +18,6 @@ export const StoreSearchMessage = Schema.TaggedUnion({
   StoreChosen: { location: SessionLocation },
   Closed: {},
   Retried: {},
-  Done: {},
 })
 const Message = StoreSearchMessage
 
@@ -33,8 +32,6 @@ export class RetryAllStores extends Command.Service<RetryAllStores>()(
   { args: {}, invalidates: () => [AllStores] },
   Effect.succeed(() => Effect.void),
 ) {}
-
-const done = Command.as(Message.make({ _tag: "Done" }))
 
 const matches = (store: Store, terms: ReadonlyArray<string>) => {
   const text = [
@@ -81,8 +78,7 @@ export const StoreSearchNoDeps = Component.define({
         $.set(model).emit(
           StoreSearchEvents.make({ _tag: "Answered", store: Option.none() }),
         ),
-      Retried: () => $.run(RetryAllStores.make().pipe(done)),
-      Done: () => model,
+      Retried: () => $.run(RetryAllStores.make().pipe(Command.asNoop)),
     }),
   view: (model, h) => {
     const current = Option.flatten(AsyncResult.value(h.loaded.current))

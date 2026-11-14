@@ -13,7 +13,6 @@ export const AppMessage = Schema.TaggedUnion({
   JoinProgressed: { progress: JoinProgress },
   JoinFailed: {},
   Retry: {},
-  Reloading: {},
 })
 
 /**
@@ -78,13 +77,7 @@ export const AppNoDeps = Component.define({
           progress === "Finished" ? ("Ready" as const) : ("Blocked" as const),
       }),
       JoinFailed: () => ({ ...model, join: "Failed" as const }),
-      Retry: () =>
-        $.run(
-          ReloadPage.make().pipe(
-            Command.as(AppMessage.make({ _tag: "Reloading" })),
-          ),
-        ),
-      Reloading: () => model,
+      Retry: () => $.run(ReloadPage.make().pipe(Command.asNoop)),
     }),
   subscriptions: (model) => [
     Router.subscription(AppRoute, model.route, (route) =>
