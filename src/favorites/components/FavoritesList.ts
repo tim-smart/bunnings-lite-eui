@@ -9,7 +9,6 @@ import { Favorites } from "../services/Favorites.ts"
 
 export const FavoritesListMessage = Schema.TaggedUnion({
   Cleared: {},
-  Done: {},
 })
 const Message = FavoritesListMessage
 
@@ -23,7 +22,7 @@ export class ClearFavorites extends Command.Service<ClearFavorites>()(
   },
   Effect.gen(function* () {
     const favorites = yield* Favorites
-    return () => favorites.clear
+    return () => Effect.as(favorites.clear, Component.noop)
   }),
 ) {}
 
@@ -37,15 +36,9 @@ export const FavoritesListNoDeps = Component.define({
   },
 }).make({
   init: () => ({}),
-  update: (model, message, $) =>
+  update: (_model, message, $) =>
     Message.match(message, {
-      Cleared: () =>
-        $.run(
-          ClearFavorites.make().pipe(
-            Command.as(Message.make({ _tag: "Done" })),
-          ),
-        ),
-      Done: () => model,
+      Cleared: () => $.run(ClearFavorites.make()),
     }),
   view: (_model, h) => {
     const favorites = AsyncResult.getOrElse(h.loaded.favorites, () => [])

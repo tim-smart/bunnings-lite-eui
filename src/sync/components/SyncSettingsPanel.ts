@@ -17,7 +17,6 @@ export const SyncSettingsPanelMessage = Schema.TaggedUnion({
   CopyPressed: {},
   Copied: { copied: Schema.Boolean },
   CopiedExpired: {},
-  Done: {},
 })
 const Message = SyncSettingsPanelMessage
 
@@ -33,14 +32,14 @@ export class SetRemoteUrl extends Command.Service<SetRemoteUrl>()(
   Effect.gen(function* () {
     const remote = yield* SyncRemote
     return ({ url }) =>
-      remote.setUrl(
-        Option.map(Option.fromNullishOr(url), (url) => new URL(url)),
-      )
+      remote
+        .setUrl(Option.map(Option.fromNullishOr(url), (url) => new URL(url)))
+        .pipe(Effect.as(Component.noop))
   }),
 ) {}
 
 /**
- * Copies a link that invites another device. It resolves with whether a link
+ * Copies a link that invites another device, and answers with whether a link
  * was copied. The link holds a private key, so it goes straight to the
  * clipboard and never through the component.
  */
@@ -51,21 +50,21 @@ export class CopyInvite extends Command.Service<CopyInvite>()(
     const invites = yield* Invites
     const clipboard = yield* Clipboard.Clipboard
     return () =>
-      Effect.flatMap(
-        invites.link,
-        Option.match({
-          onNone: () => Effect.succeed(false),
-          onSome: (link) =>
-            clipboard.writeString(link).pipe(
-              Effect.as(true),
-              Effect.orElseSucceed(() => false),
-            ),
-        }),
+      invites.link.pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.succeed(false),
+            onSome: (link) =>
+              clipboard.writeString(link).pipe(
+                Effect.as(true),
+                Effect.orElseSucceed(() => false),
+              ),
+          }),
+        ),
+        Effect.map((copied) => Message.make({ _tag: "Copied", copied })),
       )
   }),
 ) {}
-
-const done = Command.as(Message.make({ _tag: "Done" }))
 
 // The URL a remote field holds: none when blank, and nothing to save while
 // what is typed isn't a URL yet
@@ -102,19 +101,11 @@ export const SyncSettingsPanelNoDeps = Component.define({
         const url = remoteUrlOf(text)
         return url === undefined
           ? { ...model, remoteUrl: text }
-          : $.set({ ...model, remoteUrl: text }).run(
-              SetRemoteUrl.make({ url }).pipe(done),
-            )
+          : $.set({ ...model, remoteUrl: text }).run(SetRemoteUrl.make({ url }))
       },
-      CopyPressed: () =>
-        $.run(
-          CopyInvite.make().pipe(
-            Command.map((copied) => Message.make({ _tag: "Copied", copied })),
-          ),
-        ),
+      CopyPressed: () => $.run(CopyInvite.make()),
       Copied: ({ copied }) => ({ ...model, copied }),
       CopiedExpired: () => ({ ...model, copied: false }),
-      Done: () => model,
     }),
   subscriptions: (model) => [
     model.copied &&

@@ -14,7 +14,6 @@ export const FiltersMessage = Schema.TaggedUnion({
   RatingMoved: { end: End, value: Schema.Number },
   RatingReleased: {},
   Cleared: { filter: Schema.Literals(["price", "rating"]) },
-  Done: {},
 })
 const Message = FiltersMessage
 
@@ -38,9 +37,6 @@ const parse = (text: string | null): number | undefined => {
 
 const minRef = Html.ref("price-min", "input")
 const maxRef = Html.ref("price-max", "input")
-
-const doneMessage = Message.make({ _tag: "Done" })
-const done = Command.as(doneMessage)
 
 /** The rating range the slider shows: what is being dragged, else the URL's. */
 const ratingRange = (model: Model, route: SearchRoute) => ({
@@ -76,7 +72,7 @@ export const Filters = Component.define({
     const { price, route } = $.props
     const { priceMax, priceMin, ratingMax, ratingMin } = route.query
     const patch = (query: Router.QueryPatch<SearchRoute>) =>
-      Router.patchQuery(AppRoute, route, query).pipe(done)
+      Router.patchQuery(AppRoute, route, query).pipe(Command.asNoop)
 
     // An end that was never typed is filled in for the search, but its field
     // stays empty: it may be the one being typed in next
@@ -111,8 +107,8 @@ export const Filters = Component.define({
               parse(model.priceMin) ?? priceMin ?? Math.floor(price.start),
             priceMax: parse(model.priceMax) ?? priceMax ?? Math.ceil(price.end),
           }),
-          Html.blur(minRef, () => doneMessage),
-          Html.blur(maxRef, () => doneMessage),
+          Html.blur(minRef, () => Component.noop),
+          Html.blur(maxRef, () => Component.noop),
         )
       },
       RatingMoved: ({ end, value }) => {
@@ -136,7 +132,6 @@ export const Filters = Component.define({
           : $.set({ ...model, ratingMin: null, ratingMax: null }).run(
               patch({ ratingMin: undefined, ratingMax: undefined }),
             ),
-      Done: () => model,
     })
   },
   view: (model, h) => {

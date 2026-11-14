@@ -33,7 +33,6 @@ export const ShellMessage = Schema.TaggedUnion({
   InviteChanged: { open: Schema.Boolean },
   StoreSearchAsked: { asking: Schema.Boolean },
   StoreSearchAnswered: { store: Schema.Option(SessionLocation) },
-  Done: {},
 })
 const Message = ShellMessage
 
@@ -48,7 +47,7 @@ export class AnswerStoreSearch extends Command.Service<AnswerStoreSearch>()(
   },
   Effect.gen(function* () {
     const prompt = yield* StoreSearchPrompt
-    return ({ store }) => prompt.answer(store)
+    return ({ store }) => Effect.as(prompt.answer(store), Component.noop)
   }),
 ) {}
 
@@ -69,11 +68,8 @@ const headerRef = Html.ref("header", "header")
 const searchRef = Html.ref("search", "input")
 const syncSettingsRef = Html.ref("sync-settings-open", "button")
 
-const doneMessage = Message.make({ _tag: "Done" })
-const done = Command.as(doneMessage)
-
-const focusSyncSettings = Html.focus(syncSettingsRef, () => doneMessage)
-const noStoreFound = AnswerStoreSearch.make({ store: Option.none() }).pipe(done)
+const focusSyncSettings = Html.focus(syncSettingsRef, () => Component.noop)
+const noStoreFound = AnswerStoreSearch.make({ store: Option.none() })
 
 /** Which drawer is open, if any. Only one is open at a time. */
 const Drawer = Schema.NullOr(
@@ -115,13 +111,13 @@ const searchTyped = ShellDef.update("SearchTyped", (_model, { text }, $) => {
           priceMax: undefined,
           ratingMin: undefined,
           ratingMax: undefined,
-        }).pipe(done),
+        }).pipe(Command.asNoop),
       )
     : $.run(
         Router.push(
           AppRoute,
           AppRoute.make({ _tag: "Search", query: { query: text } }),
-        ).pipe(done),
+        ).pipe(Command.asNoop),
       )
 })
 
@@ -160,7 +156,7 @@ const storeSearchAnswered = ShellDef.update(
     $.set({
       ...model,
       drawer: model.drawer === "storeSearch" ? null : model.drawer,
-    }).run(AnswerStoreSearch.make({ store }).pipe(done)),
+    }).run(AnswerStoreSearch.make({ store })),
 )
 
 const logo = ShellDef.fragment((h, minimize: boolean) =>
@@ -399,11 +395,11 @@ export const ShellNoDeps = ShellDef.make({
   update: {
     SearchTyped: searchTyped,
     SearchSubmitted: (_model, _message, $) =>
-      $.run(Html.blur(searchRef, () => doneMessage)),
+      $.run(Html.blur(searchRef, () => Component.noop)),
     SearchWanted: (_model, _message, $) =>
       $.run(
-        Html.focus(searchRef, () => doneMessage, { preventScroll: true }),
-        Html.scrollIntoView(headerRef, () => doneMessage, {
+        Html.focus(searchRef, () => Component.noop, { preventScroll: true }),
+        Html.scrollIntoView(headerRef, () => Component.noop, {
           behavior: "smooth",
           block: "start",
         }),
@@ -418,7 +414,6 @@ export const ShellNoDeps = ShellDef.make({
     InviteChanged: inviteChanged,
     StoreSearchAsked: storeSearchAsked,
     StoreSearchAnswered: storeSearchAnswered,
-    Done: (model) => model,
   },
   subscriptions: () => [storeSearchAskedSubscription],
   head: (_model, { route }) =>

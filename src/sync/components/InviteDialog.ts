@@ -13,7 +13,6 @@ export const InviteDialogMessage = Schema.TaggedUnion({
   InviteOpened: { invite: PendingInvite },
   Dismissed: {},
   Joined: {},
-  Done: {},
 })
 const Message = InviteDialogMessage
 
@@ -32,7 +31,7 @@ export class JoinSync extends Command.Service<JoinSync>()(
   { args: {} },
   Effect.gen(function* () {
     const invites = yield* Invites
-    return () => invites.join
+    return () => Effect.as(invites.join, Component.noop)
   }),
 ) {}
 
@@ -75,7 +74,7 @@ export const InviteDialogNoDeps = Component.define({
       // so that Enter never joins one the user hasn't read.
       InviteOpened: ({ invite }) =>
         $.set({ ...model, invite })
-          .run(Html.focus(dismissRef, () => Message.make({ _tag: "Done" })))
+          .run(Html.focus(dismissRef, () => Component.noop))
           .emit(InviteDialogEvents.make({ _tag: "Opened" })),
       Dismissed: () =>
         $.set({ ...model, invite: null }).emit(
@@ -83,9 +82,8 @@ export const InviteDialogNoDeps = Component.define({
         ),
       Joined: () =>
         $.set({ ...model, invite: null })
-          .run(JoinSync.make().pipe(Command.as(Message.make({ _tag: "Done" }))))
+          .run(JoinSync.make())
           .emit(InviteDialogEvents.make({ _tag: "Closed" })),
-      Done: () => model,
     }),
   subscriptions: () => [invitesOpened],
   view: (model, h) => {

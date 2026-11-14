@@ -1,5 +1,6 @@
 import "effect/ui/html/register"
 import { assert, describe, it } from "@effect/vitest"
+import { Component } from "effect/ui"
 import { Query, Story } from "effect/ui/testing"
 import { HtmlQuery } from "effect/ui/html/testing"
 import { AppMessage, AppNoDeps, FinishJoin, ReloadPage } from "./App.ts"
@@ -42,7 +43,7 @@ describe("App", () => {
         .model((model) => assert.strictEqual(model.join, "Failed"))
         .click(HtmlQuery.role("button", { name: "Retry" }))
         .expectExact(ReloadPage)
-        .resolve(ReloadPage, undefined),
+        .resolve(ReloadPage, Component.noop),
     )
   })
 

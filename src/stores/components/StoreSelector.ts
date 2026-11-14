@@ -18,7 +18,6 @@ export const StoreSelectorMessage = Schema.TaggedUnion({
   SearchOpened: {},
   /** The store the search came back with, or none when it was closed. */
   SearchAnswered: { store: Schema.Option(SessionLocation) },
-  Done: {},
 })
 const Message = StoreSelectorMessage
 
@@ -36,7 +35,8 @@ export class ChooseStore extends Command.Service<ChooseStore>()(
   },
   Effect.gen(function* () {
     const session = yield* Session
-    return ({ location }) => session.setLocation(location)
+    return ({ location }) =>
+      Effect.as(session.setLocation(location), Component.noop)
   }),
 ) {}
 
@@ -49,11 +49,12 @@ export class SearchAllStores extends Command.Service<SearchAllStores>()(
   { args: {} },
   Effect.gen(function* () {
     const prompt = yield* StoreSearchPrompt
-    return () => prompt.ask
+    return () =>
+      Effect.map(prompt.ask, (store) =>
+        Message.make({ _tag: "SearchAnswered", store }),
+      )
   }),
 ) {}
-
-const done = Command.as(Message.make({ _tag: "Done" }))
 
 /**
  * Chooses the store to shop at: from the ten nearest, which asks for the
@@ -88,24 +89,14 @@ export const StoreSelectorNoDeps = Component.define({
     Message.match(message, {
       Reached: () =>
         model.nearbyWanted ? model : { ...model, nearbyWanted: true },
-      StoreChosen: ({ location }) =>
-        $.run(ChooseStore.make({ location }).pipe(done)),
-      SearchOpened: () =>
-        $.run(
-          SearchAllStores.make().pipe(
-            Command.map((store) =>
-              Message.make({ _tag: "SearchAnswered", store }),
-            ),
-          ),
-        ),
+      StoreChosen: ({ location }) => $.run(ChooseStore.make({ location })),
+      SearchOpened: () => $.run(SearchAllStores.make()),
       // The host hands focus back to the button that opened the search
       SearchAnswered: ({ store }) =>
         Option.match(store, {
           onNone: () => model,
-          onSome: (location) =>
-            $.run(ChooseStore.make({ location }).pipe(done)),
+          onSome: (location) => $.run(ChooseStore.make({ location })),
         }),
-      Done: () => model,
     }),
   view: (model, h) => {
     const shown = Option.flatten(AsyncResult.value(h.loaded.current))
