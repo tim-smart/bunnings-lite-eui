@@ -12,6 +12,7 @@ import { buttonClass } from "../design/classes.ts"
 import { icon } from "../design/icons.ts"
 import { skeleton } from "../design/skeleton.ts"
 import { FavoritesList } from "../favorites/components/FavoritesList.ts"
+import { ObserveSize, VirtualList } from "../kit/VirtualList.ts"
 import { ProductCard } from "../product/components/ProductCard.ts"
 import { KnownProducts } from "../product/services/KnownProducts.ts"
 import { SearchRoute } from "../routes.ts"
@@ -167,17 +168,35 @@ export const SearchPageNoDeps = Component.define({
             .children("Try another search"),
         )
 
-    const grid = (items: ReadonlyArray<ProductBaseInfo>) =>
+    // `search` names the search the items answer. The last search's items
+    // have none, so the list keeps what it measured until the next arrive.
+    const grid = (items: ReadonlyArray<ProductBaseInfo>, search?: string) =>
       items.length === 0
         ? noResults()
-        : h.div.class(gridClass).children(
-            items.map((product) =>
-              h.child(ProductCard, {
-                key: product.id,
-                props: { product, query: route.query.query },
-              }),
-            ),
-          )
+        : // Only the cards near the window are rendered
+          h.child(VirtualList, {
+            key: "results",
+            props: {
+              count: items.length,
+              estimatedRowSize: 350,
+              initialCount: 16,
+              dataset: search,
+            },
+            view: (list) =>
+              list.list(h.div.class(gridClass)).children(
+                list.items.map((index) => {
+                  const product = items[index]
+                  return list
+                    .item(h.div.key(product.id).class("grid min-w-0"), index)
+                    .children(
+                      h.child(ProductCard, {
+                        key: product.id,
+                        props: { product, query: route.query.query },
+                      }),
+                    )
+                }),
+              ),
+          })
 
     const results = AsyncResult.match(h.loaded.results, {
       // The last results stay up while the next ones load
@@ -201,7 +220,7 @@ export const SearchPageNoDeps = Component.define({
               )
               .children(Cause.pretty(cause)),
           ),
-      onSuccess: ({ value }) => grid(value.items),
+      onSuccess: ({ value }) => grid(value.items, JSON.stringify(args)),
     })
 
     // The last search's ranges stay up while the next one's load
@@ -247,9 +266,10 @@ export const SearchPageNoDeps = Component.define({
 })
 
 export const SearchPage = SearchPageNoDeps.pipe(
-  Component.provide(
+  Component.provide([
     SearchProducts.layer.pipe(
       Layer.provide([Session.layer, KnownProducts.layer]),
     ),
-  ),
+    ObserveSize.layer,
+  ]),
 )

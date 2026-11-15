@@ -61,7 +61,8 @@ src/
   search/ product/ stores/ favorites/ sync/
                 features, each split into domain/ services/ loaders/ components/
   rpc/          the API client and the logged-in session
-  browser/      browser APIs as services (viewport, share, install prompt)
+  kit/          headless components that no feature owns (the virtual list)
+  browser/      browser APIs as services (viewport, element size, share, install prompt)
   design/       class recipes, icons and view helpers shared by components
 ```
 
