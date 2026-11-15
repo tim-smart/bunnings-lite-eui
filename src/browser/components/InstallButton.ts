@@ -22,15 +22,13 @@ export class PromptInstall extends Command.Service<PromptInstall>()(
 
 const installAvailable = Subscription.make(
   "browser/installAvailable",
-  Stream.unwrap(
-    Effect.map(InstallPrompt, (install) =>
-      install.available.pipe(
-        Stream.map((available) =>
-          Message.make({ _tag: "AvailabilityChanged", available }),
-        ),
+  InstallPrompt.useSync((install) =>
+    install.available.pipe(
+      Stream.map((available) =>
+        Message.make({ _tag: "AvailabilityChanged", available }),
       ),
     ),
-  ),
+  ).pipe(Stream.unwrap),
 )
 
 /** Offers to install the app, once the browser says it can be. */

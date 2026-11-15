@@ -23,16 +23,17 @@ export class InstallPrompt extends Context.Service<
       >(undefined)
       const onOffer = (event: Event) => {
         event.preventDefault()
+        // @effect-diagnostics-next-line runEffectInsideEffect:off
         Effect.runSync(
           SubscriptionRef.set(offer, event as BeforeInstallPromptEvent),
         )
       }
-      window.addEventListener("beforeinstallprompt", onOffer)
       yield* Effect.addFinalizer(() =>
         Effect.sync(() =>
           window.removeEventListener("beforeinstallprompt", onOffer),
         ),
       )
+      window.addEventListener("beforeinstallprompt", onOffer)
       return {
         available: SubscriptionRef.changes(offer).pipe(
           Stream.map((event) => event !== undefined),

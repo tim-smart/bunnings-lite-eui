@@ -357,18 +357,17 @@ export class ObserveSize extends Command.Service<ObserveSize>()(
   Effect.gen(function* () {
     const size = yield* ElementSize
     return () =>
-      Stream.unwrap(
-        Effect.gen(function* () {
-          const refs = yield* Renderer.Refs
-          const list = yield* refs.lookup(List)
-          return Option.match(list, {
+      Renderer.Refs.use((refs) => refs.lookup(List)).pipe(
+        Effect.map(
+          Option.match({
             onNone: () => Stream.empty,
             onSome: (element) =>
               Stream.map(size.changes(element), () =>
                 Message.make({ _tag: "Resized" }),
               ),
-          })
-        }),
+          }),
+        ),
+        Stream.unwrap,
       )
   }),
 ) {}

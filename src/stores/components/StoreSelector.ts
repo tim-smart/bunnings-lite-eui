@@ -65,9 +65,13 @@ export class SearchAllStores extends Command.Service<SearchAllStores>()(
  * browser allows (`.store-select` in `index.css`). The chosen store is marked on
  * its `option`: a `value` on the `select` is set before it has options.
  *
- * The search is a drawer, which the shell shows. It is asked for here and
- * comes back with a store or without one.
+ * The search is the last option of the list. It opens a drawer, which the
+ * shell shows, and comes back with a store or without one. The host puts the
+ * chosen store back on the `select` meanwhile, as the Model never chose the
+ * search option.
  */
+const searchValue = "search-all-stores"
+
 export const StoreSelectorNoDeps = Component.define({
   name: "StoreSelector",
   model: Schema.Struct({
@@ -92,7 +96,7 @@ export const StoreSelectorNoDeps = Component.define({
         model.nearbyWanted ? model : { ...model, nearbyWanted: true },
       StoreChosen: ({ location }) => $.run(ChooseStore.make({ location })),
       SearchOpened: () => $.run(SearchAllStores.make()),
-      // The host hands focus back to the button that opened the search
+      // The host hands focus back to the select that opened the search
       SearchAnswered: ({ store }) =>
         Option.match(store, {
           onNone: () => model,
@@ -133,6 +137,9 @@ export const StoreSelectorNoDeps = Component.define({
           // A press that opens a styled list focuses an option, not the select
           .onClick(Message.make({ _tag: "Reached" }))
           .onChange(({ value }) => {
+            if (value === searchValue) {
+              return Message.make({ _tag: "SearchOpened" })
+            }
             const store = nearby.find((store) => store.name === value)
             return store === undefined
               ? undefined
@@ -161,10 +168,9 @@ export const StoreSelectorNoDeps = Component.define({
                       .key(location.code)
                       .children(location.city),
             }),
-            // What a list opened too early has to offer
-            model.nearbyWanted &&
-              AsyncResult.isInitial(h.loaded.nearby) &&
-              h.option.disabled(true).key("loading").children("Loading…"),
+            // In the list rather than beside it, so the page doesn't shift
+            nearbyStatus !== "" &&
+              h.option.disabled(true).key("status").children(nearbyStatus),
             nearby.length > 0 &&
               h.optgroup
                 .attr("label", "Near you")
@@ -178,29 +184,29 @@ export const StoreSelectorNoDeps = Component.define({
                       .children(store.displayName),
                   ),
                 ),
+            (Option.isSome(shown) ||
+              nearbyStatus !== "" ||
+              nearby.length > 0) &&
+              h.hr.key("search-separator"),
+            h.option
+              .attr("value", searchValue)
+              .class("store-select-search")
+              .key(searchValue)
+              .children(
+                icon(h, "search", { class: "size-4 shrink-0" }),
+                "Search all stores",
+              ),
           ),
         icon(h, "chevronDown", {
           class:
             "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 opacity-50",
         }),
       ),
-      h.div.class("mt-2 flex items-center gap-3").children(
-        h.p
-          // Always here, so what it comes to say is announced
-          .attr("aria-live", "polite")
-          .class("text-sm text-muted-foreground")
-          .children(nearbyStatus),
-        h.button
-          .attr("type", "button")
-          .class(
-            "ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-primary/15",
-          )
-          .onClick(Message.make({ _tag: "SearchOpened" }))
-          .children(
-            icon(h, "search", { class: "size-4" }),
-            "Search all stores",
-          ),
-      ),
+      h.p
+        // Always here, so what it comes to say is announced
+        .attr("aria-live", "polite")
+        .class("sr-only")
+        .children(nearbyStatus),
     )
   },
 })

@@ -1,4 +1,11 @@
-import { Context, Effect, Exit, Layer, Option, Scope } from "effect"
+import {
+  Context,
+  Effect,
+  FiberHandle,
+  Layer,
+  LayerRef,
+  Option,
+} from "effect"
 import { EventLog, EventLogRemote } from "effect/eventlog"
 import { RpcClient, RpcSerialization } from "effect/rpc"
 import { Socket } from "effect/socket"
@@ -31,35 +38,31 @@ export class SyncRemote extends Context.Service<
     SyncRemote,
     Effect.gen(function* () {
       const settings = yield* SyncSettings
-      const context = yield* Effect.context<
-        EventLog.Registry | Socket.WebSocketConstructor
-      >()
-      const scope = yield* Effect.scope
-      let current: Scope.Closeable | undefined
+      const remote = yield* LayerRef.make(
+        Layer.unwrap(
+          Effect.map(
+            settings.remoteUrl,
+            Option.match({ onNone: () => Layer.empty, onSome: remoteLayer }),
+          ),
+        ),
+        { idleTimeToLive: "Infinity", preload: false },
+      )
+      // Connecting waits for the remote to answer, so it runs in the
+      // background, and a new remote interrupts a connection still waiting
+      const connecting = yield* FiberHandle.make()
+      const connect = FiberHandle.run(
+        connecting,
+        remote.refresh.pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Could not connect to the sync remote", cause),
+          ),
+        ),
+      ).pipe(Effect.asVoid)
 
-      const connect = (url: Option.Option<URL>) =>
-        Effect.gen(function* () {
-          if (current !== undefined) {
-            yield* Scope.close(current, Exit.void)
-            current = undefined
-          }
-          if (Option.isNone(url)) return
-          const connection = yield* Scope.fork(scope)
-          current = connection
-          yield* Layer.buildWithScope(remoteLayer(url.value), connection).pipe(
-            Effect.provide(context),
-            Effect.catchCause((cause) =>
-              Effect.logWarning("Could not connect to the sync remote", cause),
-            ),
-            Effect.forkIn(connection),
-          )
-        })
-
-      yield* Effect.flatMap(settings.remoteUrl, connect)
+      yield* connect
 
       return {
-        setUrl: (url) =>
-          Effect.andThen(settings.setRemoteUrl(url), connect(url)),
+        setUrl: (url) => Effect.andThen(settings.setRemoteUrl(url), connect),
       }
     }),
   ).pipe(Layer.provide([SyncSettings.layer, EventLog.layerRegistry]))

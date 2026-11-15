@@ -1,4 +1,3 @@
-import "./BigIntPolyfill.ts"
 import "effect/ui/html/register"
 import "./index.css"
 import * as BrowserKeyValueStore from "@effect/platform-browser/BrowserKeyValueStore"

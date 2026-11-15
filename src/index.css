@@ -357,6 +357,13 @@ body {
         opacity: 0.5;
         cursor: default;
       }
+      .store-select hr {
+        margin: 0.25rem -0.25rem;
+        border-color: var(--border);
+      }
+      .store-select option.store-select-search svg {
+        color: var(--muted-foreground);
+      }
       /* The tick of the chosen store, at the far end of its row */
       .store-select option::checkmark {
         order: 1;
