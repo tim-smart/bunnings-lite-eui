@@ -47,12 +47,14 @@ const matches = (store: Store, terms: ReadonlyArray<string>) => {
 }
 
 /**
- * The drawer that searches every store by hand. Mount it while it is open,
- * outside the page it covers. It reports the store that was picked, or that
- * it was closed, and leaves choosing the store to whoever asked.
+ * The drawer that searches every store by hand. Mount it outside the page it
+ * covers, while it is open and then until the drawer has left. It reports
+ * the store that was picked, or that it was closed, and leaves choosing the
+ * store to whoever asked.
  */
 export const StoreSearchNoDeps = Component.define({
   name: "StoreSearch",
+  props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({
     search: Schema.String,
   }),
@@ -89,6 +91,7 @@ export const StoreSearchNoDeps = Component.define({
       h,
       {
         titleId: "store-search-title",
+        open: h.props.open,
         onClose: Message.make({ _tag: "Closed" }),
         class: "h-[80vh]",
       },
