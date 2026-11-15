@@ -1,11 +1,11 @@
 # bunnings-lite-uai
 
-A lightweight Bunnings client built on `effect/ui`: product search with
+A lightweight Bunnings client built on `@effect/ui`: product search with
 filters, product pages, a store picker, and favourites that sync between
 devices through an encrypted event log.
 
 It is a port of [bunnings-lite](https://github.com/tim-smart/bunnings-lite)
-from React to the experimental `effect/ui` modules. The client is a
+from React to the experimental `@effect/ui` package. The client is a
 client-rendered SPA. `server/` is the API it talks to, carried over as is.
 
 ## Setup

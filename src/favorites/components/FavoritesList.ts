@@ -1,6 +1,6 @@
 import { Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Command, Component } from "effect/ui"
+import { Command, Component } from "@effect/ui"
 import { icon } from "../../design/icons.ts"
 import { ProductCard } from "../../product/components/ProductCard.ts"
 import { KnownProducts } from "../../product/services/KnownProducts.ts"

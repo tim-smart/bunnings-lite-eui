@@ -1,8 +1,8 @@
-import "effect/ui/html/register"
+import "@effect/ui/html/register"
 import { assert, describe, it } from "@effect/vitest"
-import { HtmlQuery } from "effect/ui/html/testing"
-import type { View } from "effect/ui"
-import { Story } from "effect/ui/testing"
+import { HtmlQuery } from "@effect/ui/html/testing"
+import type { View } from "@effect/ui"
+import { Story } from "@effect/ui/testing"
 import {
   Facet,
   FacetValue,

@@ -1,6 +1,6 @@
 import { Array as Arr, Cause, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Component, Head } from "effect/ui"
+import { Component, Head } from "@effect/ui"
 import type { ProductBaseInfo } from "../../server/src/domain/Bunnings.ts"
 import { InstallButton } from "../browser/components/InstallButton.ts"
 import {

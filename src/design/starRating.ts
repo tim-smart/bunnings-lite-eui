@@ -1,4 +1,4 @@
-import { Html } from "effect/ui/html"
+import { Html } from "@effect/ui/html"
 import type { H } from "./h"
 import { icon } from "./icons"
 

@@ -1,4 +1,4 @@
-import type { View } from "effect/ui"
+import type { View } from "@effect/ui"
 import type { RichNode } from "../product/domain/RichText.ts"
 import type { H } from "./h.ts"
 

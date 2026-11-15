@@ -1,7 +1,7 @@
-import "effect/ui/html/register"
+import "@effect/ui/html/register"
 import { assert, describe, it } from "@effect/vitest"
-import { Router } from "effect/ui"
-import { Story } from "effect/ui/testing"
+import { Router } from "@effect/ui"
+import { Story } from "@effect/ui/testing"
 import type { SearchRoute } from "../../routes.ts"
 import { Filters, FiltersMessage } from "./Filters.ts"
 

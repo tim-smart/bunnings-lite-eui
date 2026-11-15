@@ -1,5 +1,5 @@
 import { Effect, Layer, Schema } from "effect"
-import { Command, Component, Head, Router } from "effect/ui"
+import { Command, Component, Head, Router } from "@effect/ui"
 import { Reload } from "./browser/services/Reload.ts"
 import { buttonClass } from "./design/classes.ts"
 import { AppRoute } from "./routes.ts"

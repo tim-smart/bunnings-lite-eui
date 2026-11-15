@@ -1,6 +1,6 @@
 import { DateTime, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Command, Component, Head, Router } from "effect/ui"
+import { Command, Component, Head, Router } from "@effect/ui"
 import type {
   ProductReview,
   ReviewStats,

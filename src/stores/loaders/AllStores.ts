@@ -1,5 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
-import { Loader } from "effect/reactivity"
+import { Loader } from "@effect/ui"
 import { Store } from "../../../server/src/domain/Bunnings.ts"
 import { ApiError } from "../../rpc/domain/ApiError.ts"
 import { Session } from "../../rpc/services/Session.ts"

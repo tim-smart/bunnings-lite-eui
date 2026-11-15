@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect"
 import { EventLog } from "effect/eventlog"
-import { Loader } from "effect/reactivity"
+import { Loader } from "@effect/ui"
 import { SyncSettings } from "../services/SyncSettings.ts"
 
 /** The device's identity, and the remote it syncs with if one is set. */

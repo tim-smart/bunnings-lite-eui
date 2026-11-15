@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Loader } from "effect/reactivity"
+import { Loader } from "@effect/ui"
 import { SessionLocation } from "../../../server/src/domain/Bunnings.ts"
 import { SessionTag } from "../../rpc/domain/SessionTag.ts"
 import { Session } from "../../rpc/services/Session.ts"

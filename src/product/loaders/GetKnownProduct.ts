@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Loader } from "effect/reactivity"
+import { Loader } from "@effect/ui"
 import { ProductBaseInfo } from "../../../server/src/domain/Bunnings.ts"
 import { KnownProducts } from "../services/KnownProducts.ts"
 

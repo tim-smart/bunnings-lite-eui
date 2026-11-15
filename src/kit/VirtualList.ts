@@ -1,6 +1,6 @@
 import { Effect, Option, Schema, Stream } from "effect"
-import { Command, Component, Renderer, Subscription } from "effect/ui"
-import { Html } from "effect/ui/html"
+import { Command, Component, Renderer, Subscription } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { ElementSize } from "../browser/services/ElementSize.ts"
 import { Viewport } from "../browser/services/Viewport.ts"
 
@@ -515,7 +515,10 @@ export const VirtualList = Component.define({
         b
           .ref(List)
           .attr("role", "list")
-          .attr("style", `padding-top:${before}px;padding-bottom:${after}px`),
+          .style({
+            paddingTop: `${before}px`,
+            paddingBottom: `${after}px`,
+          }),
       ),
       // Only some of the items are in the document, so each one says where
       // it is in the whole list
@@ -528,7 +531,7 @@ export const VirtualList = Component.define({
           .on("focusin", Message.make({ _tag: "Focused", index }))
           .on("focusout", Message.make({ _tag: "Blurred", index }))
         return index >= pushed && index < pushed + model.lanes
-          ? item.attr("style", `margin-top:${between}px`)
+          ? item.style({ marginTop: `${between}px` })
           : item
       }),
     }

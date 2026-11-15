@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Loader } from "effect/reactivity"
+import { Loader } from "@effect/ui"
 import { ReviewStats } from "../../../server/src/domain/Bazaar.ts"
 import { ApiError } from "../../rpc/domain/ApiError.ts"
 import { Session } from "../../rpc/services/Session.ts"

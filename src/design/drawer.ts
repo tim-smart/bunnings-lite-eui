@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { Subscription, type View } from "effect/ui"
+import { Subscription, type View } from "@effect/ui"
 import type { H } from "./h.ts"
 
 /**

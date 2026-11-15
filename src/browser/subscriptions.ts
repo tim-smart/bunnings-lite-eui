@@ -1,6 +1,6 @@
 import { Effect, Option, Stream } from "effect"
-import { AsyncResult, type Loader } from "effect/reactivity"
-import { Subscription } from "effect/ui"
+import { type Loader, Subscription } from "@effect/ui"
+import { AsyncResult } from "effect/reactivity"
 import { Viewport } from "./services/Viewport.ts"
 
 /**

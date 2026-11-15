@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import { Loader } from "effect/reactivity"
+import { Loader } from "@effect/ui"
 import { ProductReview } from "../../../server/src/domain/Bazaar.ts"
 import { ApiError } from "../../rpc/domain/ApiError.ts"
 import { ReviewFeed } from "../services/ReviewFeed.ts"

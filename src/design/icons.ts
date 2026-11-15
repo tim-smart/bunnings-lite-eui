@@ -1,4 +1,4 @@
-import { Html } from "effect/ui/html"
+import { Html } from "@effect/ui/html"
 import type { H } from "./h"
 
 type Shape = readonly [tag: string, attrs: Readonly<Record<string, string>>]

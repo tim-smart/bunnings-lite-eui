@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Component } from "effect/ui"
+import { Component } from "@effect/ui"
 import { ProductBaseInfo } from "../../../server/src/domain/Bunnings.ts"
 import { cardClass } from "../../design/classes.ts"
 import { starRating } from "../../design/starRating.ts"

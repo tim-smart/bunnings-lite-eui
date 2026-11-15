@@ -1,7 +1,7 @@
 import { Layer, Option, Schema } from "effect"
 import { Session } from "../../rpc/services/Session.ts"
 import { AsyncResult } from "effect/reactivity"
-import { Component } from "effect/ui"
+import { Component } from "@effect/ui"
 import { badgeClass } from "../../design/classes.ts"
 import { icon } from "../../design/icons.ts"
 import { GetFulfillment } from "../loaders/GetFulfillment.ts"

@@ -1,6 +1,6 @@
 import { Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Command, Component } from "effect/ui"
+import { Command, Component } from "@effect/ui"
 import {
   SessionLocation,
   type Store,

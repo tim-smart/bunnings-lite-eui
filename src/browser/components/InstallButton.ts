@@ -1,5 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
-import { Command, Component, Subscription } from "effect/ui"
+import { Command, Component, Subscription } from "@effect/ui"
 import { buttonClass } from "../../design/classes.ts"
 import { icon } from "../../design/icons.ts"
 import { InstallPrompt } from "../services/InstallPrompt.ts"

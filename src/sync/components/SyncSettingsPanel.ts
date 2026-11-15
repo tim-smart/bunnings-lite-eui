@@ -1,7 +1,7 @@
 import * as Clipboard from "@effect/platform-browser/Clipboard"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Command, Component, Subscription } from "effect/ui"
+import { Command, Component, Subscription } from "@effect/ui"
 import { buttonClass, inputClass } from "../../design/classes.ts"
 import { drawer, drawerFooter, drawerHeader } from "../../design/drawer.ts"
 import { icon } from "../../design/icons.ts"

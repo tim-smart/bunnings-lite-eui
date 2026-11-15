@@ -46,12 +46,12 @@
           "instanceOfSchema": "error",
           "newPromise": "error",
           "nodeBuiltinImport": "error",
-          "preferSchemaOverJson": "error",
+          "globalJsonInEffect": "error",
           "processEnv": "error",
           "processEnvInEffect": "error",
           "schemaClassMissingBrand": "off",
           "schemaNumber": "off",
-          // The client is built on effect/ui, which is experimental throughout
+          // The client is built on @effect/ui, which is experimental throughout
           "experimentalApiUsage": "off",
           "unstableApiUsage": "off"
         }

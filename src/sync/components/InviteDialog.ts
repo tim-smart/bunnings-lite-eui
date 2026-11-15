@@ -1,7 +1,7 @@
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Command, Component, Subscription } from "effect/ui"
-import { Html } from "effect/ui/html"
+import { Command, Component, Subscription } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { buttonClass } from "../../design/classes.ts"
 import {
   drawer,

@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import { Command, Component, Router } from "effect/ui"
-import { Html } from "effect/ui/html"
+import { Command, Component, Router } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { inputClass, labelClass } from "../../design/classes.ts"
 import { AppRoute, SearchRoute } from "../../routes.ts"
 import { FacetRange, ratingFacet } from "../domain/Search.ts"
@@ -243,7 +243,7 @@ export const Filters = Component.define({
         .onChange(Message.make({ _tag: "RatingReleased" }))
         .key(end),
       h.output
-        .attr("style", `left: ${at(value)}`)
+        .style({ left: at(value) })
         .key(`${end}-value`)
         .children(String(value)),
     ]

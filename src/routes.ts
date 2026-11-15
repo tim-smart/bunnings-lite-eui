@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Route } from "effect/ui"
+import { Route } from "@effect/ui"
 
 // The search text. A URL without it means an empty search, and `print` leaves
 // an empty one out, so the home page stays `/`.
